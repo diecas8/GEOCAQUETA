@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geoportal SBN — Reportes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --navy:   #060d1f;
+      --deep:   #0a1628;
+      --mid:    #0d2144;
+      --azure:  #1565c0;
+      --sky:    #1e88e5;
+      --ice:    #42a5f5;
+      --white:  #e8f4fd;
+      --glass:  rgba(255,255,255,0.04);
+      --glass2: rgba(255,255,255,0.07);
+      --border: rgba(66,165,245,0.15);
+      --accent: #00e5ff;
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html, body { min-height:100%; font-family:'DM Sans', sans-serif; background:var(--navy); color:var(--white); }
+
+    /* BG */
+    .bg {
+      position:fixed; inset:0; z-index:0;
+      background:
+        radial-gradient(ellipse 60% 50% at 0% 0%, rgba(14,58,110,0.4) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 40% at 100% 100%, rgba(21,101,192,0.25) 0%, transparent 60%),
+        var(--navy);
+    }
+    .grid {
+      position:fixed; inset:0; z-index:1;
+      background-image: linear-gradient(rgba(30,136,229,0.05) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(30,136,229,0.05) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse 100% 100% at 50% 0%, black 50%, transparent 100%);
+    }
+
+    /* HEADER */
+    .header {
+      position:sticky; top:0; z-index:200;
+      height:52px;
+      background:rgba(6,13,31,0.95);
+      border-bottom:1px solid var(--border);
+      backdrop-filter:blur(20px);
+      display:flex; align-items:center; padding:0 20px; gap:12px;
+    }
+    .header-logo {
+      display:flex; align-items:center; gap:10px;
+    }
+    .logo-mark {
+      width:30px; height:30px; border-radius:8px;
+      background:linear-gradient(135deg, var(--azure), var(--ice));
+      display:flex; align-items:center; justify-content:center; font-size:15px;
+    }
+    .logo-text {
+      font-family:'Syne', sans-serif; font-size:14px; font-weight:700;
+      letter-spacing:-0.02em;
+    }
+    .logo-sub { font-size:9px; color:rgba(232,244,253,0.35); display:block; }
+    .header-div { width:1px; height:22px; background:var(--border); }
+    .header-title {
+      font-family:'Syne', sans-serif; font-size:14px; font-weight:600;
+      color:var(--ice); letter-spacing:-0.01em;
+    }
+    .spacer { flex:1; }
+    .hdr-btn {
+      padding:6px 14px;
+      background:var(--glass2); border:1px solid var(--border);
+      border-radius:8px; color:rgba(232,244,253,0.75);
+      font-family:'DM Sans', sans-serif; font-size:12px;
+      cursor:pointer; transition:all 0.2s; text-decoration:none;
+      display:inline-flex; align-items:center; gap:5px;
+    }
+    .hdr-btn:hover { background:rgba(255,255,255,0.1); color:var(--white); }
+    .hdr-btn.primary {
+      background:rgba(21,101,192,0.25);
+      border-color:rgba(66,165,245,0.35);
+      color:var(--ice);
+    }
+    .hdr-btn.primary:hover { background:rgba(21,101,192,0.4); }
+
+    /* PAGE */
+    .page {
+      position:relative; z-index:10;
+      max-width:1100px; margin:0 auto;
+      padding:32px 20px 60px;
+    }
+
+    /* PAGE HEADER */
+    .page-hero {
+      display:flex; align-items:flex-end;
+      justify-content:space-between;
+      margin-bottom:28px;
+      gap:16px; flex-wrap:wrap;
+    }
+    .page-hero-left {}
+    .page-eyebrow {
+      font-size:10px; letter-spacing:0.18em; text-transform:uppercase;
+      color:var(--accent); font-weight:600; margin-bottom:8px;
+      display:flex; align-items:center; gap:6px;
+    }
+    .page-eyebrow::before {
+      content:''; width:16px; height:1px; background:var(--accent);
+      box-shadow:0 0 4px var(--accent);
+    }
+    .page-title {
+      font-family:'Syne', sans-serif;
+      font-size:clamp(24px,4vw,34px);
+      font-weight:800; letter-spacing:-0.03em; line-height:1.1;
+    }
+    .page-title span {
+      background:linear-gradient(135deg, var(--ice), var(--accent));
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      background-clip:text;
+    }
+    .page-sub {
+      font-size:13px; color:rgba(232,244,253,0.4); margin-top:6px; font-weight:300;
+    }
+
+    /* STATS ROW */
+    .stats-row {
+      display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));
+      gap:12px; margin-bottom:24px;
+    }
+    .stat-card {
+      background:var(--glass2);
+      border:1px solid var(--border);
+      border-radius:12px; padding:16px 18px;
+      transition:border-color 0.2s;
+      animation:fadeUp 0.4s forwards; opacity:0;
+    }
+    .stat-card:hover { border-color:rgba(66,165,245,0.3); }
+    .stat-card:nth-child(1) { animation-delay:0.05s; }
+    .stat-card:nth-child(2) { animation-delay:0.1s; }
+    .stat-card:nth-child(3) { animation-delay:0.15s; }
+    .stat-card:nth-child(4) { animation-delay:0.2s; }
+
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(10px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    .stat-icon { font-size:20px; margin-bottom:8px; }
+    .stat-num {
+      font-family:'Syne', sans-serif; font-size:26px; font-weight:800;
+      color:var(--ice); letter-spacing:-0.03em; line-height:1;
+    }
+    .stat-label { font-size:11px; color:rgba(232,244,253,0.35); margin-top:4px; font-weight:300; }
+
+    /* FILTERS */
+    .filter-bar {
+      display:flex; gap:8px; flex-wrap:wrap;
+      align-items:center; margin-bottom:16px;
+    }
+    .filter-input {
+      flex:1; min-width:180px; max-width:320px;
+      padding:9px 14px;
+      background:rgba(255,255,255,0.04);
+      border:1px solid var(--border); border-radius:9px;
+      color:var(--white); font-family:'DM Sans', sans-serif; font-size:13px;
+      outline:none; transition:border-color 0.2s;
+    }
+    .filter-input::placeholder { color:rgba(232,244,253,0.2); }
+    .filter-input:focus { border-color:var(--ice); background:rgba(255,255,255,0.07); }
+
+    .filter-select {
+      padding:9px 14px;
+      background:rgba(255,255,255,0.04);
+      border:1px solid var(--border); border-radius:9px;
+      color:rgba(232,244,253,0.7); font-family:'DM Sans', sans-serif; font-size:13px;
+      outline:none; cursor:pointer;
+    }
+    .filter-select option { background:#0d2144; color:var(--white); }
+
+    /* TABLE */
+    .table-wrap {
+      background:rgba(10,22,40,0.7);
+      border:1px solid var(--border);
+      border-radius:14px; overflow:hidden;
+      animation:fadeUp 0.5s 0.2s forwards; opacity:0;
+    }
+
+    .table-scroll { overflow-x:auto; }
+
+    table { width:100%; border-collapse:collapse; }
+
+    thead tr {
+      background:rgba(21,101,192,0.1);
+      border-bottom:1px solid var(--border);
+    }
+    th {
+      padding:12px 16px;
+      font-size:10px; letter-spacing:0.12em; text-transform:uppercase;
+      color:rgba(232,244,253,0.4); font-weight:600; text-align:left;
+      white-space:nowrap;
+    }
+
+    tbody tr {
+      border-bottom:1px solid rgba(66,165,245,0.07);
+      transition:background 0.15s;
+    }
+    tbody tr:last-child { border-bottom:none; }
+    tbody tr:hover { background:rgba(21,101,192,0.08); }
+
+    td {
+      padding:13px 16px; font-size:13px; color:rgba(232,244,253,0.8);
+      vertical-align:middle;
+    }
+
+    .td-nombre { font-weight:500; color:var(--white); }
+
+    .tipo-badge {
+      display:inline-flex; align-items:center; gap:5px;
+      padding:4px 10px; border-radius:100px; font-size:11px; font-weight:500;
+    }
+    .tipo-asistencia { background:rgba(66,165,245,0.12); color:var(--ice); border:1px solid rgba(66,165,245,0.2); }
+    .tipo-capacitacion { background:rgba(0,229,255,0.1); color:#80deea; border:1px solid rgba(0,229,255,0.2); }
+    .tipo-infraestructura { background:rgba(255,152,0,0.1); color:#ffb74d; border:1px solid rgba(255,152,0,0.2); }
+    .tipo-mantenimiento { background:rgba(76,175,80,0.1); color:#a5d6a7; border:1px solid rgba(76,175,80,0.2); }
+    .tipo-otro { background:rgba(255,255,255,0.06); color:rgba(232,244,253,0.5); border:1px solid var(--border); }
+
+    .coords-text { font-size:11px; color:rgba(232,244,253,0.35); font-family:monospace; }
+
+    .td-date { font-size:12px; color:rgba(232,244,253,0.4); white-space:nowrap; }
+
+    .btn-del {
+      padding:5px 10px;
+      background:rgba(244,67,54,0.08);
+      border:1px solid rgba(244,67,54,0.2);
+      border-radius:7px; color:#ef9a9a;
+      font-family:'DM Sans', sans-serif; font-size:11px;
+      cursor:pointer; transition:all 0.2s;
+    }
+    .btn-del:hover { background:rgba(244,67,54,0.18); color:#ffcdd2; }
+
+    /* Empty state */
+    .empty-state {
+      padding:60px 20px;
+      text-align:center; color:rgba(232,244,253,0.3);
+    }
+    .empty-icon { font-size:48px; margin-bottom:12px; }
+    .empty-text { font-size:14px; }
+
+    /* Loading */
+    .loading-row td {
+      text-align:center; padding:40px;
+      color:rgba(232,244,253,0.3); font-size:13px;
+    }
+
+    .spinner {
+      display:inline-block; width:16px; height:16px;
+      border:2px solid rgba(66,165,245,0.2);
+      border-top-color:var(--ice); border-radius:50%;
+      animation:spin 0.7s linear infinite;
+      margin-right:8px; vertical-align:middle;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* TOAST */
+    .toast {
+      position:fixed; bottom:24px; right:24px;
+      background:rgba(10,22,40,0.97);
+      border:1px solid var(--border);
+      backdrop-filter:blur(16px);
+      padding:12px 18px; border-radius:10px;
+      font-size:13px; z-index:9999;
+      display:none; align-items:center; gap:8px;
+      box-shadow:0 8px 32px rgba(0,0,0,0.4);
+      animation:toastSlide 0.3s ease;
+      max-width:320px;
+    }
+    .toast.show { display:flex; }
+    @keyframes toastSlide {
+      from { opacity:0; transform:translateY(12px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    /* MODAL */
+    .modal-overlay {
+      display:none; position:fixed; inset:0;
+      background:rgba(0,0,0,0.65); backdrop-filter:blur(6px);
+      z-index:9000; align-items:center; justify-content:center;
+    }
+    .modal-overlay.show { display:flex; }
+    .modal-card {
+      background:#0a1628; border:1px solid var(--border);
+      border-radius:16px; width:480px; max-width:92vw;
+      max-height:88vh; overflow-y:auto;
+      box-shadow:0 24px 80px rgba(0,0,0,0.6);
+      animation:modalIn 0.3s ease;
+    }
+    @keyframes modalIn {
+      from { opacity:0; transform:scale(0.95) translateY(12px); }
+      to   { opacity:1; transform:scale(1) translateY(0); }
+    }
+    .modal-header {
+      padding:20px 20px 0;
+      display:flex; justify-content:space-between; align-items:flex-start;
+    }
+    .modal-title {
+      font-family:'Syne', sans-serif; font-size:18px; font-weight:700;
+      letter-spacing:-0.02em;
+    }
+    .modal-badge {
+      display:inline-block; padding:3px 9px; border-radius:100px;
+      font-size:10px; letter-spacing:0.08em;
+      background:rgba(21,101,192,0.2); border:1px solid rgba(66,165,245,0.25);
+      color:var(--ice); margin-top:4px;
+    }
+    .modal-close {
+      width:30px; height:30px; border-radius:8px;
+      background:rgba(255,255,255,0.05); border:1px solid var(--border);
+      color:rgba(232,244,253,0.5); cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      font-size:16px; transition:all 0.2s;
+    }
+    .modal-close:hover { background:rgba(255,255,255,0.1); color:var(--white); }
+    .modal-body { padding:16px 20px 20px; }
+    .form-group { margin-bottom:14px; }
+    .form-label {
+      display:block; font-size:10px; letter-spacing:0.12em;
+      text-transform:uppercase; color:rgba(232,244,253,0.4);
+      font-weight:600; margin-bottom:6px;
+    }
+    .form-input, .form-select, .form-textarea {
+      width:100%; padding:11px 14px;
+      background:rgba(255,255,255,0.04); border:1px solid rgba(66,165,245,0.15);
+      border-radius:9px; color:var(--white);
+      font-family:'DM Sans', sans-serif; font-size:13px;
+      outline:none; transition:border-color 0.2s;
+    }
+    .form-select option { background:#0d2144; color:var(--white); }
+    .form-input::placeholder, .form-textarea::placeholder { color:rgba(232,244,253,0.2); }
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      border-color:var(--ice); background:rgba(255,255,255,0.07);
+    }
+    .form-textarea { resize:vertical; min-height:80px; }
+    .modal-actions { display:flex; gap:8px; padding-top:4px; }
+    .btn-cancel {
+      flex:1; padding:11px; background:rgba(255,255,255,0.04);
+      border:1px solid var(--border); border-radius:9px;
+      color:rgba(232,244,253,0.6); font-family:'DM Sans', sans-serif;
+      font-size:13px; cursor:pointer; transition:all 0.2s;
+    }
+    .btn-cancel:hover { background:rgba(255,255,255,0.08); color:var(--white); }
+    .btn-save {
+      flex:2; padding:11px;
+      background:linear-gradient(135deg, var(--azure), var(--sky));
+      border:none; border-radius:9px; color:white;
+      font-family:'Syne', sans-serif; font-size:13px; font-weight:600;
+      cursor:pointer; transition:all 0.2s;
+      box-shadow:0 4px 16px rgba(21,101,192,0.3);
+    }
+    .btn-save:hover { transform:translateY(-1px); box-shadow:0 6px 24px rgba(21,101,192,0.45); }
+
+    /* Pagination */
+    .pagination {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 16px;
+      border-top:1px solid rgba(66,165,245,0.07);
+      font-size:12px; color:rgba(232,244,253,0.35);
+    }
+    .page-btns { display:flex; gap:6px; }
+    .page-btn {
+      width:30px; height:30px; border-radius:7px;
+      background:rgba(255,255,255,0.04); border:1px solid var(--border);
+      color:rgba(232,244,253,0.6); cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      font-size:13px; transition:all 0.2s;
+    }
+    .page-btn:hover:not(:disabled) { background:rgba(21,101,192,0.2); color:var(--white); }
+    .page-btn:disabled { opacity:0.3; cursor:not-allowed; }
+    .page-btn.current { background:var(--azure); color:white; border-color:var(--azure); }
+
+
+    /* ── SECCIÓN USOS DE SUELO ── */
+    .section-divider {
+      margin: 40px 0 24px;
+      display: flex; align-items: center; gap: 16px;
+    }
+    .section-divider-line { flex:1; height:1px; background:var(--border); }
+    .section-divider-title {
+      font-family:'Syne',sans-serif; font-size:20px; font-weight:700;
+      letter-spacing:-0.02em; white-space:nowrap;
+    }
+    .section-divider-title span {
+      background:linear-gradient(135deg,var(--ice),var(--accent));
+      -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+    }
+
+    .uso-stats-row {
+      display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));
+      gap:10px; margin-bottom:20px;
+    }
+    .uso-stat-card {
+      background:var(--glass2); border:1px solid var(--border); border-radius:10px;
+      padding:12px 14px; animation:fadeUp 0.4s forwards; opacity:0;
+    }
+    .uso-stat-card:nth-child(1){animation-delay:.05s}
+    .uso-stat-card:nth-child(2){animation-delay:.10s}
+    .uso-stat-card:nth-child(3){animation-delay:.15s}
+    .uso-stat-card:nth-child(4){animation-delay:.20s}
+    .uso-stat-num { font-family:'Syne',sans-serif; font-size:22px; font-weight:800; color:var(--ice); }
+    .uso-stat-label { font-size:10px; color:rgba(232,244,253,0.35); margin-top:3px; }
+
+    .cultivo-swatch {
+      display:inline-block; width:10px; height:10px;
+      border-radius:3px; margin-right:6px; vertical-align:middle; flex-shrink:0;
+    }
+    .uso-filter-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+
+    @media (max-width:600px) {
+      .stats-row { grid-template-columns:repeat(2,1fr); }
+      .filter-bar { flex-direction:column; }
+      .filter-input { max-width:100%; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="bg"></div>
+<div class="grid"></div>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-logo">
+    <div class="logo-mark">🌿</div>
+    <div>
+      <div class="logo-text">Geoportal SBN</div>
+      <span class="logo-sub">Biocomercio Sostenible</span>
+    </div>
+  </div>
+  <div class="header-div"></div>
+  <span class="header-title">📋 Panel de Reportes</span>
+  <div class="spacer"></div>
+  <a href="app.html" class="hdr-btn primary">🗺️ Volver al mapa</a>
+  <button class="hdr-btn" onclick="openNewModal()">➕ Nuevo reporte</button>
+  <button class="hdr-btn" onclick="doLogout()" style="color:#ef9a9a;">Salir</button>
+</header>
+
+<!-- PAGE -->
+<main class="page">
+
+  <!-- HERO -->
+  <div class="page-hero">
+    <div class="page-hero-left">
+      <div class="page-eyebrow">Sistema de Biocomercio Nacional</div>
+      <h1 class="page-title">Reportes <span>SBN</span></h1>
+      <p class="page-sub">Gestión y seguimiento de reportes de campo geolocalizados</p>
+    </div>
+    <button class="hdr-btn primary" onclick="exportCSV()" style="height:fit-content;">⬇️ Exportar CSV</button>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card">
+      <div class="stat-icon">📋</div>
+      <div class="stat-num" id="stat-total">—</div>
+      <div class="stat-label">Reportes totales</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🔧</div>
+      <div class="stat-num" id="stat-asistencia">—</div>
+      <div class="stat-label">Asistencia técnica</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🏗️</div>
+      <div class="stat-num" id="stat-infraestructura">—</div>
+      <div class="stat-label">Infraestructura</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">📅</div>
+      <div class="stat-num" id="stat-mes">—</div>
+      <div class="stat-label">Este mes</div>
+    </div>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="filter-bar">
+    <input type="text" id="filterText" class="filter-input" placeholder="🔍 Buscar por nombre o comentario…" oninput="applyFilters()">
+    <select id="filterTipo" class="filter-select" onchange="applyFilters()">
+      <option value="">Todos los tipos</option>
+      <option value="Asistencia técnica">Asistencia técnica</option>
+      <option value="Capacitación">Capacitación</option>
+      <option value="Infraestructura">Infraestructura</option>
+      <option value="Mantenimiento">Mantenimiento</option>
+      <option value="Otro">Otro</option>
+    </select>
+    <select id="filterSort" class="filter-select" onchange="applyFilters()">
+      <option value="desc">Más recientes primero</option>
+      <option value="asc">Más antiguos primero</option>
+    </select>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-wrap">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Nombre</th>
+            <th>Tipo</th>
+            <th>Comentarios</th>
+            <th>Coordenadas</th>
+            <th>Fecha</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr class="loading-row">
+            <td colspan="7"><span class="spinner"></span> Cargando reportes…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+
+
+  <!-- ══════════════════════════════
+       SECCIÓN: MOVIMIENTOS USOS DE SUELO
+  ══════════════════════════════════ -->
+  <div class="section-divider">
+    <div class="section-divider-line"></div>
+    <div class="section-divider-title">Usos de <span>Suelo</span></div>
+    <div class="section-divider-line"></div>
+  </div>
+
+  <!-- Stats usos -->
+  <div class="uso-stats-row" id="usoStatsRow">
+    <div class="uso-stat-card">
+      <div class="uso-stat-num" id="uso-total">—</div>
+      <div class="uso-stat-label">🌾 Registros totales</div>
+    </div>
+    <div class="uso-stat-card">
+      <div class="uso-stat-num" id="uso-has">—</div>
+      <div class="uso-stat-label">📐 Hectáreas totales</div>
+    </div>
+    <div class="uso-stat-card">
+      <div class="uso-stat-num" id="uso-cultivos">—</div>
+      <div class="uso-stat-label">🌱 Tipos de cultivo</div>
+    </div>
+    <div class="uso-stat-card">
+      <div class="uso-stat-num" id="uso-mes">—</div>
+      <div class="uso-stat-label">📅 Este mes</div>
+    </div>
+  </div>
+
+  <!-- Filtros usos -->
+  <div class="uso-filter-bar">
+    <input type="text" id="usoFilterText" class="filter-input"
+           placeholder="🔍 Buscar por cultivo…" oninput="applyUsoFilters()">
+    <select id="usoFilterCultivo" class="filter-select" onchange="applyUsoFilters()">
+      <option value="">Todos los cultivos</option>
+    </select>
+    <select id="usoFilterSort" class="filter-select" onchange="applyUsoFilters()">
+      <option value="desc">Más recientes primero</option>
+      <option value="asc">Más antiguos primero</option>
+    </select>
+    <button class="hdr-btn primary" onclick="exportUsoCSV()" style="height:fit-content;">⬇️ CSV</button>
+  </div>
+
+  <!-- Tabla usos de suelo -->
+  <div class="table-wrap" style="margin-bottom:60px;">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Cultivo</th>
+            <th>Hectáreas</th>
+            <th>Predio asociado</th>
+            <th>Fecha registro</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="usoTableBody">
+          <tr class="loading-row">
+            <td colspan="6"><span class="spinner"></span> Cargando usos de suelo…</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="pagination" id="usoPagination"></div>
+  </div>
+
+</main>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- MODAL: Nuevo reporte -->
+<div class="modal-overlay" id="newModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Nuevo Reporte SBN</div>
+        <div class="modal-badge">NUEVO REGISTRO</div>
+      </div>
+      <button class="modal-close" onclick="closeNewModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Nombre *</label>
+        <input type="text" id="m_nombre" class="form-input" placeholder="Nombre del reporte">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo de requerimiento *</label>
+        <select id="m_tipo" class="form-select">
+          <option value="">Seleccione tipo</option>
+          <option value="Asistencia técnica">Asistencia técnica</option>
+          <option value="Capacitación">Capacitación</option>
+          <option value="Infraestructura">Infraestructura</option>
+          <option value="Mantenimiento">Mantenimiento</option>
+          <option value="Otro">Otro</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Comentarios</label>
+        <textarea id="m_comentarios" class="form-textarea" placeholder="Describe el requerimiento…"></textarea>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div class="form-group">
+          <label class="form-label">Latitud</label>
+          <input type="number" step="any" id="m_lat" class="form-input" placeholder="4.600000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Longitud</label>
+          <input type="number" step="any" id="m_lng" class="form-input" placeholder="-74.100000">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeNewModal()">Cancelar</button>
+        <button class="btn-save" onclick="saveNewReporte()">Guardar reporte →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Ver detalle -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="det-title">Detalle del reporte</div>
+        <div class="modal-badge" id="det-badge">—</div>
+      </div>
+      <button class="modal-close" onclick="closeDetailModal()">✕</button>
+    </div>
+    <div class="modal-body" id="det-body"></div>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL      = "https://nyqzlkfphssodbsgeeob.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55cXpsa2ZwaHNzb2Ric2dlZW9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxMzg5ODAsImV4cCI6MjA4OTcxNDk4MH0.D0mv8NNf3w362u1Q9PRcy9H_vO46u6jIva3SpMaKLng";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Auth guard — no bloqueante, sin loop
+  if (!sessionStorage.getItem('guest')) {
+    sb.auth.getSession().then(({ data }) => {
+      if (!data?.session) window.location.replace('index.html');
+    }).catch(() => {});
+  }
+
+  async function doLogout() {
+    await sb.auth.signOut();
+    sessionStorage.removeItem('guest');
+    window.location.href = 'index.html';
+  }
+
+  // ── DATA ──
+  let allReportes = [];
+  let filtered = [];
+  const PAGE_SIZE = 15;
+  let currentPage = 1;
+
+  async function loadReportes() {
+    try {
+      const { data, error } = await sb.from('reportes_sbn').select('*').order('created_at', { ascending:false });
+      if (error) throw error;
+      allReportes = data || [];
+      updateStats();
+      applyFilters();
+    } catch(err) {
+      document.getElementById('tableBody').innerHTML =
+        `<tr><td colspan="7" style="text-align:center; color:#ef9a9a; padding:30px;">
+          ❌ Error cargando reportes: ${err.message}
+        </td></tr>`;
+    }
+  }
+
+  function updateStats() {
+    const now = new Date();
+    const thisMonth = allReportes.filter(r => {
+      const d = new Date(r.created_at);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    document.getElementById('stat-total').textContent = allReportes.length;
+    document.getElementById('stat-asistencia').textContent =
+      allReportes.filter(r => r.tipo_requerimiento === 'Asistencia técnica').length;
+    document.getElementById('stat-infraestructura').textContent =
+      allReportes.filter(r => r.tipo_requerimiento === 'Infraestructura').length;
+    document.getElementById('stat-mes').textContent = thisMonth.length;
+  }
+
+  function applyFilters() {
+    const txt  = document.getElementById('filterText').value.toLowerCase();
+    const tipo = document.getElementById('filterTipo').value;
+    const sort = document.getElementById('filterSort').value;
+
+    filtered = allReportes.filter(r => {
+      const matchTxt = !txt ||
+        (r.nombre||'').toLowerCase().includes(txt) ||
+        (r.comentarios||'').toLowerCase().includes(txt);
+      const matchTipo = !tipo || r.tipo_requerimiento === tipo;
+      return matchTxt && matchTipo;
+    });
+
+    if (sort === 'asc') filtered.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+    else               filtered.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+
+    currentPage = 1;
+    renderTable();
+    renderPagination();
+  }
+
+  function tipoBadge(tipo) {
+    const map = {
+      'Asistencia técnica': 'tipo-asistencia',
+      'Capacitación':       'tipo-capacitacion',
+      'Infraestructura':    'tipo-infraestructura',
+      'Mantenimiento':      'tipo-mantenimiento',
+    };
+    const cls = map[tipo] || 'tipo-otro';
+    return `<span class="tipo-badge ${cls}">${tipo||'—'}</span>`;
+  }
+
+  function renderTable() {
+    const tbody = document.getElementById('tableBody');
+    if (!filtered.length) {
+      tbody.innerHTML = `<tr><td colspan="7">
+        <div class="empty-state">
+          <div class="empty-icon">🔍</div>
+          <div class="empty-text">No se encontraron reportes con los filtros actuales.</div>
+        </div></td></tr>`;
+      return;
+    }
+
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const page = filtered.slice(start, start + PAGE_SIZE);
+
+    tbody.innerHTML = page.map((r, idx) => `
+      <tr style="cursor:pointer;" onclick="showDetail(${r.id})">
+        <td style="color:rgba(232,244,253,0.3); font-size:11px;">${start + idx + 1}</td>
+        <td class="td-nombre">${r.nombre || '—'}</td>
+        <td>${tipoBadge(r.tipo_requerimiento)}</td>
+        <td style="max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; color:rgba(232,244,253,0.5);">
+          ${r.comentarios || '<span style="color:rgba(232,244,253,0.2)">Sin comentarios</span>'}
+        </td>
+        <td class="coords-text">
+          ${r.lat ? `${parseFloat(r.lat).toFixed(4)}, ${parseFloat(r.long).toFixed(4)}` : '—'}
+        </td>
+        <td class="td-date">${new Date(r.created_at).toLocaleDateString('es-CO', { year:'numeric', month:'short', day:'numeric' })}</td>
+        <td onclick="event.stopPropagation()">
+          <button class="btn-del" onclick="deleteReporte(${r.id})">🗑️</button>
+        </td>
+      </tr>`).join('');
+  }
+
+  function renderPagination() {
+    const total = Math.ceil(filtered.length / PAGE_SIZE);
+    const pag = document.getElementById('pagination');
+    if (total <= 1) { pag.innerHTML = `<span>${filtered.length} registro(s)</span>`; return; }
+
+    let btns = '';
+    for (let i = 1; i <= total; i++) {
+      if (i === 1 || i === total || Math.abs(i - currentPage) <= 1) {
+        btns += `<button class="page-btn${i===currentPage?' current':''}" onclick="goPage(${i})">${i}</button>`;
+      } else if (Math.abs(i - currentPage) === 2) {
+        btns += `<span style="color:rgba(232,244,253,0.3); align-self:center;">…</span>`;
+      }
+    }
+
+    pag.innerHTML = `
+      <span>${filtered.length} reporte(s)</span>
+      <div class="page-btns">
+        <button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>
+        ${btns}
+        <button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===total?'disabled':''}>›</button>
+      </div>`;
+  }
+
+  function goPage(n) {
+    const total = Math.ceil(filtered.length / PAGE_SIZE);
+    if (n < 1 || n > total) return;
+    currentPage = n;
+    renderTable();
+    renderPagination();
+    window.scrollTo({ top:0, behavior:'smooth' });
+  }
+
+  // ── DETAIL ──
+  function showDetail(id) {
+    const r = allReportes.find(x => x.id === id);
+    if (!r) return;
+    document.getElementById('det-title').textContent = r.nombre || 'Reporte';
+    document.getElementById('det-badge').innerHTML = tipoBadge(r.tipo_requerimiento);
+    document.getElementById('det-body').innerHTML = `
+      <div style="display:grid; gap:10px; margin-bottom:16px;">
+        ${field('Nombre', r.nombre)}
+        ${field('Tipo de requerimiento', r.tipo_requerimiento)}
+        ${field('Comentarios', r.comentarios || '—')}
+        ${field('Latitud', r.lat ? parseFloat(r.lat).toFixed(6) : '—')}
+        ${field('Longitud', r.long ? parseFloat(r.long).toFixed(6) : '—')}
+        ${field('Fecha de registro', new Date(r.created_at).toLocaleString('es-CO'))}
+        ${r.lat ? `<div style="margin-top:4px;">
+          <a href="https://www.google.com/maps?q=${r.lat},${r.long}" target="_blank"
+             style="color:var(--ice); font-size:12px; text-decoration:none;">
+            🗺️ Ver en Google Maps →
+          </a>
+        </div>` : ''}
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="closeDetailModal()">Cerrar</button>
+        <button class="btn-save" style="background:rgba(244,67,54,0.2);border:1px solid rgba(244,67,54,0.3);color:#ef9a9a;box-shadow:none;"
+          onclick="deleteReporte(${r.id}); closeDetailModal()">Eliminar</button>
+      </div>`;
+    document.getElementById('detailModal').classList.add('show');
+  }
+
+  function field(label, value) {
+    return `<div>
+      <div class="form-label">${label}</div>
+      <div style="font-size:13px; color:var(--white); padding:10px 14px;
+                  background:rgba(255,255,255,0.03); border:1px solid var(--border);
+                  border-radius:8px;">${value}</div>
+    </div>`;
+  }
+
+  function closeDetailModal() {
+    document.getElementById('detailModal').classList.remove('show');
+  }
+
+  // ── DELETE ──
+  async function deleteReporte(id) {
+    if (!confirm('¿Eliminar este reporte? Esta acción no se puede deshacer.')) return;
+    try {
+      const { error } = await sb.from('reportes_sbn').delete().eq('id', id);
+      if (error) throw error;
+      allReportes = allReportes.filter(r => r.id !== id);
+      updateStats(); applyFilters();
+      showToast('🗑️ Reporte eliminado');
+    } catch(err) { showToast('❌ Error al eliminar: ' + err.message); }
+  }
+
+  // ── NEW MODAL ──
+  function openNewModal() { document.getElementById('newModal').classList.add('show'); }
+  function closeNewModal() { document.getElementById('newModal').classList.remove('show'); }
+
+  async function saveNewReporte() {
+    const nombre = document.getElementById('m_nombre').value.trim();
+    const tipo   = document.getElementById('m_tipo').value;
+    const coment = document.getElementById('m_comentarios').value.trim();
+    const lat    = parseFloat(document.getElementById('m_lat').value);
+    const lng    = parseFloat(document.getElementById('m_lng').value);
+    if (!nombre || !tipo) { showToast('⚠️ Nombre y tipo son obligatorios'); return; }
+    try {
+      const payload = { nombre, tipo_requerimiento: tipo, comentarios: coment || null };
+      if (!isNaN(lat)) payload.lat = lat;
+      if (!isNaN(lng)) payload.long = lng;
+      const { data, error } = await sb.from('reportes_sbn').insert([payload]).select();
+      if (error) throw error;
+      allReportes.unshift(data[0]);
+      updateStats(); applyFilters();
+      closeNewModal();
+      document.getElementById('m_nombre').value = '';
+      document.getElementById('m_tipo').value = '';
+      document.getElementById('m_comentarios').value = '';
+      document.getElementById('m_lat').value = '';
+      document.getElementById('m_lng').value = '';
+      showToast('✅ Reporte guardado exitosamente');
+    } catch(err) { showToast('❌ Error: ' + err.message); }
+  }
+
+  // ── EXPORT CSV ──
+  function exportCSV() {
+    if (!filtered.length) { showToast('ℹ️ No hay datos para exportar'); return; }
+    const header = 'ID,Nombre,Tipo,Comentarios,Latitud,Longitud,Fecha';
+    const rows = filtered.map(r =>
+      `${r.id},"${r.nombre||''}","${r.tipo_requerimiento||''}","${(r.comentarios||'').replace(/"/g,"'")}",${r.lat||''},${r.long||''},"${new Date(r.created_at).toLocaleString('es-CO')}"`
+    );
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `reportes_sbn_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+    showToast('⬇️ CSV exportado');
+  }
+
+  // ── TOAST ──
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3500);
+  }
+
+  // Init
+  loadReportes();
+
+  // ══════════════════════════════════════
+  // USOS DE SUELO
+  // ══════════════════════════════════════
+  const CULTIVO_COLORS = {
+    'Pasto':'#8B4513','Forestales':'#228B22','Frijol':'#32CD32',
+    'Maiz':'#FFD700','Yuca':'#D2B48C','Aguacate':'#7CFC00',
+    'Caña':'#9ACD32','Palma de aceite':'#F4A460','Cacao':'#CD853F',
+    'Café':'#6F4E37','Frutales':'#FFA07A','Bosque natural':'#2E8B57',
+    'Bosque galeria':'#3CB371','Lago':'#4682B4','Pancoger':'#DEB887'
+  };
+
+  let allUsos = [];
+  let filteredUsos = [];
+  let prediosMap = {};   // id → nombre
+  const USO_PAGE_SIZE = 15;
+  let usoPage = 1;
+
+  async function loadUsosSuelo() {
+    try {
+      const [{ data: usos, error: ue }, { data: predios, error: pe }] = await Promise.all([
+        sb.from('usos_suelo').select('*').order('created_at', { ascending: false }),
+        sb.from('predios').select('id, predio')
+      ]);
+      if (ue) throw ue;
+      allUsos = usos || [];
+      // Construir mapa id→nombre de predios
+      (predios || []).forEach(p => { prediosMap[p.id] = p.predio || ('Predio ' + p.id); });
+      populateCultivoFilter();
+      updateUsoStats();
+      applyUsoFilters();
+    } catch(err) {
+      document.getElementById('usoTableBody').innerHTML =
+        '<tr><td colspan="6" style="text-align:center;color:#ef9a9a;padding:30px;">❌ Error: ' + err.message + '</td></tr>';
+    }
+  }
+
+  function populateCultivoFilter() {
+    const cultivos = [...new Set(allUsos.map(u => u.cultivo).filter(Boolean))].sort();
+    const sel = document.getElementById('usoFilterCultivo');
+    sel.innerHTML = '<option value="">Todos los cultivos</option>' +
+      cultivos.map(c => '<option value="' + c + '">' + c + '</option>').join('');
+  }
+
+  function updateUsoStats() {
+    const now = new Date();
+    const totalHas = allUsos.reduce((s, u) => s + (parseFloat(u.has) || 0), 0);
+    const cultivos = new Set(allUsos.map(u => u.cultivo).filter(Boolean));
+    const esMes = allUsos.filter(u => {
+      const d = new Date(u.created_at);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    document.getElementById('uso-total').textContent    = allUsos.length;
+    document.getElementById('uso-has').textContent      = totalHas.toFixed(1);
+    document.getElementById('uso-cultivos').textContent = cultivos.size;
+    document.getElementById('uso-mes').textContent      = esMes.length;
+  }
+
+  function applyUsoFilters() {
+    const txt     = document.getElementById('usoFilterText').value.toLowerCase();
+    const cultivo = document.getElementById('usoFilterCultivo').value;
+    const sort    = document.getElementById('usoFilterSort').value;
+
+    filteredUsos = allUsos.filter(u => {
+      const matchTxt = !txt || (u.cultivo||'').toLowerCase().includes(txt);
+      const matchCul = !cultivo || u.cultivo === cultivo;
+      return matchTxt && matchCul;
+    });
+
+    if (sort === 'asc') filteredUsos.sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+    else               filteredUsos.sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+
+    usoPage = 1;
+    renderUsoTable();
+    renderUsoPagination();
+  }
+
+  function renderUsoTable() {
+    const tbody = document.getElementById('usoTableBody');
+    if (!filteredUsos.length) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🌾</div><div class="empty-text">Sin registros de usos de suelo.</div></div></td></tr>';
+      return;
+    }
+    const start = (usoPage - 1) * USO_PAGE_SIZE;
+    const page  = filteredUsos.slice(start, start + USO_PAGE_SIZE);
+    const color = c => CULTIVO_COLORS[c] || '#f59e0b';
+
+    tbody.innerHTML = page.map((u, idx) => `
+      <tr>
+        <td style="color:rgba(232,244,253,0.3);font-size:11px;">${start + idx + 1}</td>
+        <td class="td-nombre">
+          <span class="cultivo-swatch" style="background:${color(u.cultivo)};"></span>${u.cultivo || '—'}
+        </td>
+        <td style="font-family:'Syne',sans-serif;font-weight:700;color:var(--ice);">
+          ${parseFloat(u.has || 0).toFixed(2)} ha
+        </td>
+        <td style="font-size:12px;color:rgba(232,244,253,0.55);">
+          ${u.id_predio ? (prediosMap[u.id_predio] || 'ID ' + u.id_predio) : '<span style="color:rgba(232,244,253,0.2)">Sin asociar</span>'}
+        </td>
+        <td class="td-date">${new Date(u.created_at).toLocaleDateString('es-CO',{year:'numeric',month:'short',day:'numeric'})}</td>
+        <td>
+          <button class="btn-del" onclick="deleteUso(${u.id})">🗑️</button>
+        </td>
+      </tr>`).join('');
+  }
+
+  function renderUsoPagination() {
+    const total = Math.ceil(filteredUsos.length / USO_PAGE_SIZE);
+    const pag   = document.getElementById('usoPagination');
+    if (total <= 1) { pag.innerHTML = '<span>' + filteredUsos.length + ' registro(s)</span>'; return; }
+    let btns = '';
+    for (let i = 1; i <= total; i++) {
+      if (i === 1 || i === total || Math.abs(i - usoPage) <= 1)
+        btns += '<button class="page-btn' + (i===usoPage?' current':'') + '" onclick="goUsoPage(' + i + ')">' + i + '</button>';
+      else if (Math.abs(i - usoPage) === 2)
+        btns += '<span style="color:rgba(232,244,253,0.3);align-self:center;">…</span>';
+    }
+    pag.innerHTML = '<span>' + filteredUsos.length + ' registro(s)</span>' +
+      '<div class="page-btns">' +
+      '<button class="page-btn" onclick="goUsoPage(' + (usoPage-1) + ')" ' + (usoPage===1?'disabled':'') + '>‹</button>' +
+      btns +
+      '<button class="page-btn" onclick="goUsoPage(' + (usoPage+1) + ')" ' + (usoPage===total?'disabled':'') + '>›</button>' +
+      '</div>';
+  }
+
+  function goUsoPage(n) {
+    const total = Math.ceil(filteredUsos.length / USO_PAGE_SIZE);
+    if (n < 1 || n > total) return;
+    usoPage = n;
+    renderUsoTable();
+    renderUsoPagination();
+  }
+
+  async function deleteUso(id) {
+    if (!confirm('¿Eliminar este uso de suelo? Esta acción no se puede deshacer.')) return;
+    try {
+      const { error } = await sb.from('usos_suelo').delete().eq('id', id);
+      if (error) throw error;
+      allUsos = allUsos.filter(u => u.id !== id);
+      updateUsoStats();
+      applyUsoFilters();
+      showToast('🗑️ Uso de suelo eliminado');
+    } catch(err) { showToast('❌ Error: ' + err.message); }
+  }
+
+  function exportUsoCSV() {
+    if (!filteredUsos.length) { showToast('ℹ️ No hay datos para exportar'); return; }
+    const header = 'ID,Cultivo,Hectareas,Predio,Fecha';
+    const rows = filteredUsos.map(u =>
+      u.id + ',"' + (u.cultivo||'') + '",' + (u.has||'') + ',"' +
+      (u.id_predio ? (prediosMap[u.id_predio]||'ID '+u.id_predio) : '') + '","' +
+      new Date(u.created_at).toLocaleString('es-CO') + '"'
+    );
+    const csv  = [header, ...rows].join('\n');
+    const blob = new Blob(['\ufeff' + csv], { type:'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = 'usos_suelo_' + new Date().toISOString().split('T')[0] + '.csv';
+    a.click(); URL.revokeObjectURL(url);
+    showToast('⬇️ CSV de usos de suelo exportado');
+  }
+
+  // Cargar ambos datasets en paralelo
+  loadUsosSuelo();
+
+</script>
+</body>
+</html>
