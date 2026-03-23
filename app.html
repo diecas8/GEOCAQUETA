@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>Geoportal SBN — Mapa</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --navy:     #060d1f;
+      --deep:     #0a1628;
+      --mid:      #0d2144;
+      --azure:    #1565c0;
+      --sky:      #1e88e5;
+      --ice:      #42a5f5;
+      --white:    #e8f4fd;
+      --glass:    rgba(255,255,255,0.04);
+      --glass2:   rgba(255,255,255,0.07);
+      --border:   rgba(66,165,245,0.15);
+      --accent:   #00e5ff;
+      --sidebar-w: 300px;
+      --header-h:  52px;
+    }
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html, body { height:100%; overflow:hidden; font-family:'DM Sans',sans-serif; background:var(--navy); color:var(--white); }
+
+    /* AUTH SPLASH */
+    #authSplash {
+      position:fixed; inset:0; z-index:99999; background:var(--navy);
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px;
+      font-size:13px; color:rgba(232,244,253,0.4); font-family:'DM Sans',sans-serif;
+    }
+    #authSplash .sl { width:44px; height:44px; border-radius:12px; background:linear-gradient(135deg,var(--azure),var(--ice)); display:flex; align-items:center; justify-content:center; font-size:22px; }
+    #authSplash .sr { width:22px; height:22px; border:2.5px solid rgba(66,165,245,0.2); border-top-color:var(--ice); border-radius:50%; animation:spin 0.7s linear infinite; }
+
+    /* HEADER */
+    .header { height:var(--header-h); background:rgba(6,13,31,0.96); border-bottom:1px solid var(--border); backdrop-filter:blur(20px); display:flex; align-items:center; padding:0 16px; gap:12px; position:relative; z-index:1000; }
+    .logo-wrap { display:flex; align-items:center; gap:10px; flex-shrink:0; }
+    .logo-mark { width:32px; height:32px; border-radius:8px; background:linear-gradient(135deg,var(--azure),var(--ice)); display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }
+    .logo-text { font-family:'Syne',sans-serif; font-size:15px; font-weight:700; letter-spacing:-0.02em; }
+    .logo-sub  { font-size:10px; color:rgba(232,244,253,0.38); font-weight:300; display:block; }
+    .hdr-div   { width:1px; height:24px; background:var(--border); }
+    .status-pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:100px; font-size:11px; font-weight:500; background:rgba(0,229,255,0.08); border:1px solid rgba(0,229,255,0.2); color:var(--accent); }
+    .status-pill .dot { width:5px; height:5px; border-radius:50%; background:var(--accent); box-shadow:0 0 6px var(--accent); }
+    .status-pill.offline { background:rgba(255,152,0,0.1); border-color:rgba(255,152,0,0.3); color:#ffb74d; }
+    .status-pill.offline .dot { background:#ffb74d; box-shadow:0 0 6px #ffb74d; }
+    .pending-badge { display:none; align-items:center; gap:4px; background:rgba(255,152,0,0.15); border:1px solid rgba(255,152,0,0.3); color:#ffb74d; font-size:10px; padding:3px 8px; border-radius:100px; }
+    .hdr-spacer { flex:1; }
+    .hdr-actions { display:flex; align-items:center; gap:8px; }
+    .hdr-btn { padding:6px 14px; background:var(--glass2); border:1px solid var(--border); border-radius:8px; color:rgba(232,244,253,0.75); font-family:'DM Sans',sans-serif; font-size:12px; cursor:pointer; transition:all 0.2s; }
+    .hdr-btn:hover { background:rgba(255,255,255,0.1); color:var(--white); }
+    .hdr-btn.danger { background:rgba(244,67,54,0.08); border-color:rgba(244,67,54,0.2); color:#ef9a9a; }
+    .hdr-btn.danger:hover { background:rgba(244,67,54,0.15); }
+    .menu-toggle { display:none; width:36px; height:36px; background:var(--glass2); border:1px solid var(--border); border-radius:8px; color:var(--white); align-items:center; justify-content:center; cursor:pointer; font-size:16px; flex-shrink:0; }
+
+    /* LAYOUT */
+    .app-body { display:flex; height:calc(100vh - var(--header-h)); }
+
+    /* SIDEBAR */
+    .sidebar { width:var(--sidebar-w); background:rgba(6,13,31,0.93); border-right:1px solid var(--border); backdrop-filter:blur(16px); display:flex; flex-direction:column; overflow-y:auto; overflow-x:hidden; flex-shrink:0; transition:transform 0.3s cubic-bezier(.4,0,.2,1); z-index:100; }
+    .sidebar::-webkit-scrollbar { width:4px; }
+    .sidebar::-webkit-scrollbar-thumb { background:rgba(66,165,245,0.2); border-radius:4px; }
+    .s-section { padding:16px 16px 14px; border-bottom:1px solid rgba(66,165,245,0.07); }
+    .s-label { font-size:9px; letter-spacing:0.18em; text-transform:uppercase; color:rgba(232,244,253,0.3); font-weight:600; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+    .s-label::after { content:''; flex:1; height:1px; background:rgba(66,165,245,0.1); }
+    .basemap-row { display:flex; gap:6px; }
+    .bm-btn { flex:1; padding:9px 8px; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:8px; color:rgba(232,244,253,0.5); font-family:'DM Sans',sans-serif; font-size:12px; cursor:pointer; transition:all 0.2s; display:flex; flex-direction:column; align-items:center; gap:3px; }
+    .bm-btn .bm-icon { font-size:18px; }
+    .bm-btn:hover { border-color:rgba(66,165,245,0.3); color:var(--white); }
+    .bm-btn.active { background:rgba(21,101,192,0.2); border-color:var(--azure); color:var(--ice); box-shadow:0 0 12px rgba(21,101,192,0.2); }
+    .action-btn { width:100%; padding:10px 14px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:9px; color:rgba(232,244,253,0.8); font-family:'DM Sans',sans-serif; font-size:13px; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:9px; text-align:left; }
+    .action-btn:hover { background:rgba(21,101,192,0.15); border-color:rgba(66,165,245,0.35); color:var(--white); transform:translateX(2px); }
+    .action-btn .btn-icon { width:26px; height:26px; border-radius:6px; display:flex; align-items:center; justify-content:center; background:rgba(66,165,245,0.1); font-size:13px; flex-shrink:0; }
+    .btn-gap { margin-bottom:6px; }
+    .layer-item { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:8px; cursor:pointer; transition:background 0.2s; margin-bottom:3px; }
+    .layer-item:hover { background:rgba(255,255,255,0.04); }
+    .layer-cb { display:none; }
+    .layer-toggle { width:34px; height:18px; background:rgba(255,255,255,0.1); border-radius:9px; position:relative; transition:background 0.25s; flex-shrink:0; border:1px solid rgba(66,165,245,0.15); }
+    .layer-toggle::after { content:''; width:12px; height:12px; background:rgba(232,244,253,0.4); border-radius:50%; position:absolute; top:2px; left:2px; transition:transform 0.25s, background 0.25s; }
+    .layer-cb:checked + .layer-toggle { background:var(--azure); border-color:var(--azure); }
+    .layer-cb:checked + .layer-toggle::after { transform:translateX(16px); background:white; }
+    .layer-info { flex:1; }
+    .layer-name { font-size:13px; font-weight:400; }
+    .layer-desc { font-size:10px; color:rgba(232,244,253,0.35); margin-top:1px; }
+    .layer-swatch { width:8px; height:24px; border-radius:3px; flex-shrink:0; }
+    .draw-row { display:flex; gap:6px; }
+    .draw-opt { flex:1; padding:9px; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:8px; cursor:pointer; transition:all 0.2s; }
+    .draw-opt input { display:none; }
+    .draw-opt .opt-icon { display:block; text-align:center; font-size:18px; margin-bottom:2px; }
+    .draw-opt .opt-label { font-size:11px; color:rgba(232,244,253,0.5); text-align:center; display:block; line-height:1.4; }
+    .draw-opt:has(input:checked) { background:rgba(21,101,192,0.2); border-color:var(--azure); }
+    .draw-opt:has(input:checked) .opt-label { color:var(--ice); }
+    .draw-opt:hover { border-color:rgba(66,165,245,0.3); }
+    .search-wrap { position:relative; }
+    .search-input { width:100%; padding:10px 14px 10px 36px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:9px; color:var(--white); font-family:'DM Sans',sans-serif; font-size:13px; outline:none; transition:border-color 0.2s, background 0.2s; }
+    .search-input::placeholder { color:rgba(232,244,253,0.25); }
+    .search-input:focus { border-color:var(--ice); background:rgba(255,255,255,0.07); }
+    .search-icon { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:rgba(232,244,253,0.3); font-size:13px; pointer-events:none; }
+    .search-results { list-style:none; margin-top:6px; max-height:180px; overflow-y:auto; background:rgba(10,22,40,0.97); border:1px solid var(--border); border-radius:9px; display:none; }
+    .search-results.has-results { display:block; }
+    .search-results li { padding:9px 12px; border-bottom:1px solid rgba(66,165,245,0.07); cursor:pointer; transition:background 0.15s; font-size:12px; }
+    .search-results li:last-child { border-bottom:none; }
+    .search-results li:hover { background:rgba(21,101,192,0.2); }
+    .search-results li strong { font-size:13px; display:block; }
+    .search-results li span { color:rgba(232,244,253,0.4); font-size:11px; }
+    .sync-bar { margin:8px 16px; padding:8px 12px; background:rgba(255,152,0,0.1); border:1px solid rgba(255,152,0,0.25); border-radius:8px; font-size:11px; color:#ffb74d; display:none; align-items:center; gap:6px; }
+    .sync-ring { width:10px; height:10px; border:1.5px solid rgba(255,183,77,0.3); border-top-color:#ffb74d; border-radius:50%; animation:spin 0.6s linear infinite; flex-shrink:0; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .sidebar-footer { margin-top:auto; padding:12px 16px; border-top:1px solid rgba(66,165,245,0.07); font-size:10px; color:rgba(232,244,253,0.2); text-align:center; letter-spacing:0.05em; }
+
+    /* MAP */
+    .map-container { flex:1; position:relative; overflow:hidden; }
+    #map { width:100%; height:100%; }
+
+    /* ETIQUETAS DE CULTIVO / PREDIO sobre polígonos */
+    .lf-lbl {
+      background: rgba(6,13,31,0.85);
+      border: 1px solid rgba(66,165,245,0.22);
+      border-radius: 5px;
+      padding: 2px 7px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      color: #e8f4fd;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.45);
+      line-height: 1.5;
+    }
+
+    .toast { position:absolute; bottom:28px; left:50%; transform:translateX(-50%); background:rgba(6,13,31,0.95); border:1px solid var(--border); backdrop-filter:blur(16px); color:var(--white); padding:10px 20px; border-radius:100px; font-size:13px; z-index:5000; display:none; align-items:center; gap:8px; box-shadow:0 8px 32px rgba(0,0,0,0.4); white-space:nowrap; }
+    .toast.show { display:flex; animation:toastIn 0.3s ease; }
+    @keyframes toastIn { from { opacity:0; transform:translateX(-50%) translateY(8px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+    .toast-cancel { color:var(--accent); cursor:pointer; font-size:12px; padding:2px 8px; border-radius:4px; border:1px solid rgba(0,229,255,0.2); transition:background 0.2s; }
+    .toast-cancel:hover { background:rgba(0,229,255,0.1); }
+    .coords-bar { position:absolute; bottom:8px; right:8px; background:rgba(6,13,31,0.85); border:1px solid var(--border); border-radius:6px; padding:4px 10px; font-size:10px; color:rgba(232,244,253,0.45); z-index:500; letter-spacing:0.05em; pointer-events:none; }
+
+    /* MODALS */
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); backdrop-filter:blur(6px); z-index:9000; align-items:center; justify-content:center; }
+    .modal-overlay.show { display:flex; }
+    .modal-card { background:#0a1628; border:1px solid var(--border); border-radius:16px; width:460px; max-width:92vw; max-height:88vh; overflow-y:auto; box-shadow:0 24px 80px rgba(0,0,0,0.6); animation:modalIn 0.3s cubic-bezier(.4,0,.2,1); }
+    @keyframes modalIn { from { opacity:0; transform:scale(0.95) translateY(12px); } to { opacity:1; transform:scale(1) translateY(0); } }
+    .modal-header { padding:20px 20px 0; display:flex; align-items:flex-start; justify-content:space-between; }
+    .modal-title { font-family:'Syne',sans-serif; font-size:18px; font-weight:700; letter-spacing:-0.02em; }
+    .modal-badge { display:inline-block; padding:3px 9px; border-radius:100px; font-size:10px; letter-spacing:0.08em; background:rgba(21,101,192,0.2); border:1px solid rgba(66,165,245,0.25); color:var(--ice); margin-top:4px; }
+    .modal-close { width:30px; height:30px; border-radius:8px; background:rgba(255,255,255,0.05); border:1px solid var(--border); color:rgba(232,244,253,0.5); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; transition:all 0.2s; flex-shrink:0; }
+    .modal-close:hover { background:rgba(255,255,255,0.1); color:var(--white); }
+    .modal-body { padding:16px 20px 20px; }
+    .area-display { background:rgba(0,229,255,0.06); border:1px solid rgba(0,229,255,0.2); border-radius:9px; padding:10px 14px; display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+    .area-num { font-family:'Syne',sans-serif; font-size:22px; font-weight:700; color:var(--accent); }
+    .area-label { font-size:11px; color:rgba(232,244,253,0.4); }
+    .coord-display { background:rgba(21,101,192,0.08); border:1px solid rgba(66,165,245,0.15); border-radius:9px; padding:10px 14px; font-size:12px; color:rgba(232,244,253,0.6); display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+    .form-group { margin-bottom:14px; }
+    .form-label { display:block; font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:rgba(232,244,253,0.4); font-weight:600; margin-bottom:6px; }
+    .form-input, .form-select, .form-textarea { width:100%; padding:11px 14px; background:rgba(255,255,255,0.04); border:1px solid rgba(66,165,245,0.15); border-radius:9px; color:var(--white); font-family:'DM Sans',sans-serif; font-size:13px; outline:none; transition:border-color 0.2s, background 0.2s; }
+    .form-select { cursor:pointer; }
+    .form-select option { background:#0d2144; color:var(--white); }
+    .form-input::placeholder, .form-textarea::placeholder { color:rgba(232,244,253,0.2); }
+    .form-input:focus, .form-select:focus, .form-textarea:focus { border-color:var(--ice); background:rgba(255,255,255,0.07); }
+    .form-textarea { resize:vertical; min-height:80px; }
+    .modal-actions { display:flex; gap:8px; padding-top:4px; }
+    .btn-modal-cancel { flex:1; padding:11px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:9px; color:rgba(232,244,253,0.6); font-family:'DM Sans',sans-serif; font-size:13px; cursor:pointer; transition:all 0.2s; }
+    .btn-modal-cancel:hover { background:rgba(255,255,255,0.08); color:var(--white); }
+    .btn-modal-save { flex:2; padding:11px; background:linear-gradient(135deg,var(--azure),var(--sky)); border:none; border-radius:9px; color:white; font-family:'Syne',sans-serif; font-size:13px; font-weight:600; cursor:pointer; transition:all 0.2s; box-shadow:0 4px 16px rgba(21,101,192,0.3); }
+    .btn-modal-save:hover { transform:translateY(-1px); box-shadow:0 6px 24px rgba(21,101,192,0.45); }
+
+    /* Leaflet overrides */
+    .leaflet-popup-content-wrapper { background:rgba(10,22,40,0.97) !important; border:1px solid rgba(66,165,245,0.2) !important; border-radius:10px !important; color:var(--white) !important; box-shadow:0 8px 32px rgba(0,0,0,0.5) !important; }
+    .leaflet-popup-tip { background:rgba(10,22,40,0.97) !important; }
+    .leaflet-popup-content { font-family:'DM Sans',sans-serif; font-size:13px; line-height:1.6; }
+    .popup-title { font-family:'Syne',sans-serif; font-size:15px; font-weight:700; color:var(--ice); margin-bottom:6px; padding-bottom:6px; border-bottom:1px solid rgba(66,165,245,0.15); }
+    .popup-row { display:flex; gap:6px; margin:3px 0; }
+    .popup-key { color:rgba(232,244,253,0.4); font-size:11px; flex-shrink:0; min-width:72px; }
+    .popup-val { color:var(--white); font-size:12px; }
+    .leaflet-bar a { background:rgba(10,22,40,0.95) !important; border-color:rgba(66,165,245,0.2) !important; color:var(--ice) !important; }
+    .leaflet-bar a:hover { background:rgba(21,101,192,0.2) !important; }
+
+    @media (max-width:768px) {
+      .sidebar { position:absolute; top:0; left:0; height:100%; transform:translateX(-100%); box-shadow:8px 0 40px rgba(0,0,0,0.5); }
+      .sidebar.open { transform:translateX(0); }
+      .menu-toggle { display:flex; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- AUTH SPLASH: cubre pantalla hasta confirmar sesión (evita parpadeo) -->
+<div id="authSplash">
+  <div class="sl">🌿</div>
+  <div class="sr"></div>
+  Verificando acceso…
+</div>
+
+<!-- HEADER -->
+<header class="header">
+  <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+  <div class="logo-wrap">
+    <div class="logo-mark">🌿</div>
+    <div>
+      <div class="logo-text">Geoportal SBN</div>
+      <span class="logo-sub">Biocomercio Sostenible</span>
+    </div>
+  </div>
+  <div class="hdr-div"></div>
+  <div id="connStatus" class="status-pill"><span class="dot"></span>Conectado</div>
+  <div id="pendingBadge" class="pending-badge">⏳ <span id="pendingCount">0</span> pendiente(s)</div>
+  <div class="hdr-spacer"></div>
+  <div class="hdr-actions">
+    <button class="hdr-btn" onclick="window.location.href='reporte.html'">📋 Reportes</button>
+    <button class="hdr-btn danger" onclick="doLogout()">Salir</button>
+  </div>
+</header>
+
+<!-- APP BODY -->
+<div class="app-body">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar" id="sidebar">
+
+    <div class="s-section">
+      <div class="s-label">Mapa base</div>
+      <div class="basemap-row">
+        <button class="bm-btn active" id="bm-satellite" onclick="setBaseMap('satellite')"><span class="bm-icon">🛰️</span>Satélite</button>
+        <button class="bm-btn" id="bm-hybrid"   onclick="setBaseMap('hybrid')"><span class="bm-icon">🗺️</span>Híbrido</button>
+        <button class="bm-btn" id="bm-topo"     onclick="setBaseMap('topo')"><span class="bm-icon">🏔️</span>Topográfico</button>
+      </div>
+    </div>
+
+    <div class="s-section">
+      <div class="s-label">Ubicación</div>
+      <button class="action-btn" onclick="getCurrentLocation()">
+        <span class="btn-icon">📍</span><span>Usar GPS — Ir a mi posición</span>
+      </button>
+    </div>
+
+    <div class="s-section">
+      <div class="s-label">Capas disponibles</div>
+      <label class="layer-item">
+        <input type="checkbox" class="layer-cb" id="layer_predios" onchange="toggleLayer('predios')">
+        <span class="layer-toggle"></span>
+        <span class="layer-swatch" style="background:#10b981;"></span>
+        <span class="layer-info">
+          <span class="layer-name">Predios</span>
+          <span class="layer-desc">Polígonos registrados SBN</span>
+        </span>
+      </label>
+      <label class="layer-item">
+        <input type="checkbox" class="layer-cb" id="layer_usos_suelo" onchange="toggleLayer('usos_suelo')">
+        <span class="layer-toggle"></span>
+        <span class="layer-swatch" style="background:#f59e0b;"></span>
+        <span class="layer-info">
+          <span class="layer-name">Usos de suelo</span>
+          <span class="layer-desc">Color y etiqueta por cultivo</span>
+        </span>
+      </label>
+      <label class="layer-item">
+        <input type="checkbox" class="layer-cb" id="layer_reportes" onchange="toggleLayer('reportes_sbn')">
+        <span class="layer-toggle"></span>
+        <span class="layer-swatch" style="background:#ef4444;"></span>
+        <span class="layer-info">
+          <span class="layer-name">Reportes SBN</span>
+          <span class="layer-desc">Puntos de campo geolocalizados</span>
+        </span>
+      </label>
+    </div>
+
+    <div class="s-section">
+      <div class="s-label">Digitalizar</div>
+      <div class="draw-row" style="margin-bottom:10px;">
+        <label class="draw-opt">
+          <input type="radio" name="drawLayer" value="predios" checked>
+          <span class="opt-icon">🏞️</span><span class="opt-label">Predio</span>
+        </label>
+        <label class="draw-opt">
+          <input type="radio" name="drawLayer" value="usos_suelo">
+          <span class="opt-icon">🌾</span><span class="opt-label">Uso de suelo</span>
+        </label>
+      </div>
+      <p style="font-size:11px;color:rgba(232,244,253,0.3);line-height:1.6;margin-bottom:10px;">
+        Selecciona el tipo, usa el polígono en el mapa. El área se calcula automáticamente.
+      </p>
+      <button class="action-btn" onclick="clearDrawings()">
+        <span class="btn-icon">🗑️</span><span>Limpiar dibujos</span>
+      </button>
+    </div>
+
+    <div class="s-section">
+      <div class="s-label">Reporte SBN</div>
+      <button class="action-btn btn-gap" onclick="startReportSelection()">
+        <span class="btn-icon">➕</span><span>Nuevo reporte en mapa</span>
+      </button>
+      <p style="font-size:11px;color:rgba(232,244,253,0.3);line-height:1.6;">
+        Haz clic en el mapa para geolocalizar el reporte.
+      </p>
+    </div>
+
+    <div class="s-section">
+      <div class="s-label">Buscar predio</div>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" class="search-input" placeholder="Nombre del predio..." autocomplete="off">
+      </div>
+      <ul id="searchResults" class="search-results"></ul>
+    </div>
+
+    <div class="sync-bar" id="syncBar">
+      <div class="sync-ring"></div>
+      Sincronizando datos pendientes…
+    </div>
+    <div class="sidebar-footer">Geoportal SBN v2.0 · CBS Colombia</div>
+  </nav>
+
+  <!-- MAP -->
+  <div class="map-container" id="mapContainer">
+    <div id="map"></div>
+    <div id="toast" class="toast"></div>
+    <div id="coordsBar" class="coords-bar">—</div>
+  </div>
+</div>
+
+<!-- MODAL: Predio / Uso de suelo -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTitle">Nuevo elemento</div>
+        <div class="modal-badge" id="modalBadge">POLÍGONO</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="area-display">
+        <div><div class="area-num" id="areaNum">—</div><div class="area-label">Hectáreas calculadas</div></div>
+      </div>
+      <form id="editForm"></form>
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" type="button" onclick="closeModal()">Cancelar</button>
+        <button class="btn-modal-save"   type="button" id="btnSave" onclick="submitModal()">Guardar →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Reporte -->
+<div class="modal-overlay" id="reporteModal">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Nuevo Reporte SBN</div>
+        <div class="modal-badge">PUNTO DE CAMPO</div>
+      </div>
+      <button class="modal-close" onclick="closeReporteModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="coordDisplay" class="coord-display">📍 Selecciona una ubicación en el mapa</div>
+      <form id="reporteForm">
+        <div class="form-group">
+          <label class="form-label">Nombre *</label>
+          <input type="text" id="reporte_nombre" class="form-input" placeholder="Nombre del reporte">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo de requerimiento *</label>
+          <select id="reporte_tipo" class="form-select">
+            <option value="">Seleccione tipo</option>
+            <option>Asistencia técnica</option>
+            <option>Capacitación</option>
+            <option>Infraestructura</option>
+            <option>Mantenimiento</option>
+            <option>Otro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Comentarios</label>
+          <textarea id="reporte_comentarios" class="form-textarea" placeholder="Describe el requerimiento…"></textarea>
+        </div>
+      </form>
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" type="button" onclick="closeReporteModal()">Cancelar</button>
+        <button class="btn-modal-save"   type="button" onclick="saveReporte()">Guardar reporte →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ═══ SUPABASE ═══ */
+  const SUPABASE_URL      = "https://nyqzlkfphssodbsgeeob.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55cXpsa2ZwaHNzb2Ric2dlZW9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxMzg5ODAsImV4cCI6MjA4OTcxNDk4MH0.D0mv8NNf3w362u1Q9PRcy9H_vO46u6jIva3SpMaKLng";
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  /* ═══ AUTH GUARD SIN PARPADEO ═══
+     El splash cubre TODO hasta que se confirma la sesión.
+     - Visitante (guest): ocultar splash inmediatamente.
+     - Con sesión activa: ocultar splash.
+     - Sin sesión: redirigir a login con replace() (sin historial).
+     - Error de red: ocultar splash de todas formas.
+  ══════════════════════════════════ */
+  const _splash = document.getElementById('authSplash');
+  function hideSplash() { _splash.style.display = 'none'; }
+
+  if (sessionStorage.getItem('guest')) {
+    hideSplash();
+  } else {
+    sb.auth.getSession()
+      .then(({ data }) => {
+        if (data && data.session) { hideSplash(); }
+        else { window.location.replace('index.html'); }
+      })
+      .catch(() => hideSplash());
+  }
+
+  async function doLogout() {
+    await sb.auth.signOut().catch(() => {});
+    sessionStorage.removeItem('guest');
+    window.location.replace('index.html');
+  }
+
+  /* ═══ OFFLINE QUEUE ═══ */
+  let pendingQueue = JSON.parse(localStorage.getItem('pendingQueue') || '[]');
+
+  function saveQueue() {
+    localStorage.setItem('pendingQueue', JSON.stringify(pendingQueue));
+    const badge = document.getElementById('pendingBadge');
+    document.getElementById('pendingCount').textContent = pendingQueue.length;
+    badge.style.display = pendingQueue.length > 0 ? 'inline-flex' : 'none';
+  }
+
+  async function syncPending() {
+    if (!navigator.onLine || !pendingQueue.length) return;
+    document.getElementById('syncBar').style.display = 'flex';
+    const synced = [];
+    for (let i = 0; i < pendingQueue.length; i++) {
+      try {
+        const { error } = await sb.from(pendingQueue[i].table).insert([pendingQueue[i].data]);
+        if (!error) synced.push(i);
+      } catch(e) {}
+    }
+    pendingQueue = pendingQueue.filter((_, i) => !synced.includes(i));
+    saveQueue();
+    document.getElementById('syncBar').style.display = 'none';
+    if (synced.length) refreshAllActive();
+  }
+
+  async function queueOrSave(table, data) {
+    if (navigator.onLine) {
+      try {
+        const { error } = await sb.from(table).insert([data]);
+        if (error) throw error;
+        return true;
+      } catch(err) {
+        pendingQueue.push({ table, data }); saveQueue();
+        showToast('⚠️ Sin conexión — guardado localmente', true);
+        return false;
+      }
+    }
+    pendingQueue.push({ table, data }); saveQueue();
+    showToast('📱 Offline — se sincronizará automáticamente', true);
+    return false;
+  }
+
+  window.addEventListener('online',  () => { setConnStatus(true);  syncPending(); });
+  window.addEventListener('offline', () =>   setConnStatus(false));
+
+  function setConnStatus(online) {
+    const el = document.getElementById('connStatus');
+    el.className = 'status-pill' + (online ? '' : ' offline');
+    el.innerHTML = `<span class="dot"></span>${online ? 'Conectado' : 'Sin conexión'}`;
+  }
+
+  saveQueue();
+  syncPending();
+
+  /* ═══ MAPA ═══ */
+  const map = L.map('map', { zoomControl:false }).setView([4.6, -74.1], 8);
+  L.control.zoom({ position:'topright' }).addTo(map);
+
+  const baseMaps = {
+    satellite: L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom:20, subdomains:['mt0','mt1','mt2','mt3'], attribution:'© Google Maps' }),
+    hybrid:    L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom:20, subdomains:['mt0','mt1','mt2','mt3'], attribution:'© Google Maps' }),
+    topo:      L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',     { maxZoom:17, attribution:'© OpenTopoMap' })
+  };
+  let currentBM = 'satellite';
+  baseMaps.satellite.addTo(map);
+
+  window.setBaseMap = function(type) {
+    map.removeLayer(baseMaps[currentBM]);
+    currentBM = type;
+    baseMaps[type].addTo(map);
+    document.querySelectorAll('.bm-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('bm-' + type).classList.add('active');
+  };
+
+  map.on('mousemove', e => {
+    document.getElementById('coordsBar').textContent =
+      e.latlng.lat.toFixed(5) + ', ' + e.latlng.lng.toFixed(5);
+  });
+
+  /* ═══ COLORES POR CULTIVO ═══ */
+  const cultivoColors = {
+    'Pasto':'#8B4513', 'Forestales':'#228B22', 'Frijol':'#32CD32',
+    'Maiz':'#FFD700', 'Yuca':'#D2B48C', 'Aguacate':'#7CFC00',
+    'Caña':'#9ACD32', 'Palma de aceite':'#F4A460', 'Cacao':'#CD853F',
+    'Café':'#6F4E37', 'Frutales':'#FFA07A', 'Bosque natural':'#2E8B57',
+    'Bosque galeria':'#3CB371', 'Lago':'#4682B4', 'Pancoger':'#DEB887'
+  };
+
+  const styleUsoSuelo = f => ({ color: cultivoColors[f.properties.cultivo] || '#f59e0b', weight:2.5, fillOpacity:0 });
+  const stylePredios  = { color:'#10b981', weight:2.5, fillOpacity:0 };
+
+  /* ═══ ETIQUETAS SOBRE POLÍGONOS ═══
+     Cada capa tiene su LayerGroup de etiquetas separado.
+     Se ocultan con zoom < 12 para no saturar vistas generales.
+  ═════════════════════════════════════ */
+  const labelGroups = {};   // { 'usos_suelo': LayerGroup, 'predios': LayerGroup }
+
+  function getCentroid(feature) {
+    try {
+      const c = turf.centroid(feature);
+      return [c.geometry.coordinates[1], c.geometry.coordinates[0]];
+    } catch(e) { return null; }
+  }
+
+  function makeLabel(latlng, text, accentColor) {
+    return L.marker(latlng, {
+      icon: L.divIcon({
+        className: 'lf-lbl',
+        html: '<span style="border-left:3px solid ' + accentColor + ';padding-left:5px;">' + text + '</span>',
+        iconAnchor: [0, 0]
+      }),
+      interactive: false,
+      zIndexOffset: 600
+    });
+  }
+
+  function applyLabelZoom() {
+    const show = map.getZoom() >= 12;
+    Object.values(labelGroups).forEach(lg => {
+      if (!lg) return;
+      lg.eachLayer(lyr => {
+        const el = lyr.getElement ? lyr.getElement() : null;
+        if (el) el.style.display = show ? '' : 'none';
+      });
+    });
+  }
+  map.on('zoomend', applyLabelZoom);
+
+  /* ═══ CAPAS ACTIVAS ═══ */
+  let activeLayers = {};
+
+  async function loadLayer(tableName) {
+    if (!navigator.onLine) { showToast('📶 Sin conexión — capas no disponibles'); return null; }
+    try {
+      const { data, error } = await sb.from(tableName).select('*');
+      if (error) throw error;
+      if (!data || !data.length) return null;
+      const features = data.map(row => {
+        let geom = null;
+        if (row.geom && typeof row.geom === 'object' && row.geom.type) geom = row.geom;
+        else if (row.geom && typeof row.geom === 'string') { try { geom = JSON.parse(row.geom); } catch(e) { return null; } }
+        if (!geom) return null;
+        const props = Object.assign({}, row);
+        delete props.geom;
+        return { type:'Feature', geometry:geom, properties:props };
+      }).filter(Boolean);
+      return features.length ? { type:'FeatureCollection', features } : null;
+    } catch(err) {
+      showToast('❌ Error cargando ' + tableName);
+      return null;
+    }
+  }
+
+  window.toggleLayer = async function(layerName) {
+    const cbId = layerName === 'reportes_sbn' ? 'layer_reportes' : 'layer_' + layerName;
+    const chk  = document.getElementById(cbId);
+    if (!chk) return;
+
+    if (chk.checked) {
+      /* Ya en mapa: no recargar */
+      if (activeLayers[layerName] && map.hasLayer(activeLayers[layerName])) return;
+      /* Existe pero fue removido: reagregar */
+      if (activeLayers[layerName]) {
+        activeLayers[layerName].addTo(map);
+        if (labelGroups[layerName]) labelGroups[layerName].addTo(map);
+        return;
+      }
+
+      showToast('⏳ Cargando capa…');
+      const geojson = await loadLayer(layerName);
+      document.getElementById('toast').classList.remove('show');
+
+      if (!geojson) {
+        showToast('ℹ️ Sin geometrías en ' + layerName);
+        chk.checked = false;
+        return;
+      }
+
+      /* ── REPORTES SBN ── */
+      if (layerName === 'reportes_sbn') {
+        activeLayers[layerName] = L.geoJSON(geojson, {
+          pointToLayer: (f, ll) => L.circleMarker(ll, { radius:8, fillColor:'#ef4444', color:'#fff', weight:2, fillOpacity:0.9 }),
+          onEachFeature: (f, l) => {
+            const p = f.properties;
+            l.bindPopup(
+              '<div class="popup-title">📋 ' + (p.nombre||'—') + '</div>' +
+              '<div class="popup-row"><span class="popup-key">Tipo</span><span class="popup-val">' + (p.tipo_requerimiento||'—') + '</span></div>' +
+              '<div class="popup-row"><span class="popup-key">Comentario</span><span class="popup-val">' + (p.comentarios||'—') + '</span></div>' +
+              '<div class="popup-row"><span class="popup-key">Fecha</span><span class="popup-val">' + new Date(p.created_at).toLocaleDateString('es-CO') + '</span></div>'
+            );
+          }
+        }).addTo(map);
+        return;
+      }
+
+      /* ── USOS DE SUELO: polígonos + etiqueta de cultivo ── */
+      if (layerName === 'usos_suelo') {
+        const lg = L.layerGroup();
+        labelGroups[layerName] = lg;
+
+        activeLayers[layerName] = L.geoJSON(geojson, {
+          style: styleUsoSuelo,
+          onEachFeature: (f, l) => {
+            const p = f.properties;
+            const col = cultivoColors[p.cultivo] || '#f59e0b';
+
+            l.bindPopup(
+              '<div class="popup-title">🌾 ' + (p.cultivo||'—') + '</div>' +
+              '<div class="popup-row"><span class="popup-key">Área</span><span class="popup-val">' + p.has + ' ha</span></div>' +
+              (p.id_predio ? '<div class="popup-row"><span class="popup-key">Predio ID</span><span class="popup-val">' + p.id_predio + '</span></div>' : '')
+            );
+
+            /* Etiqueta centrada */
+            const centroid = getCentroid(f);
+            if (centroid && p.cultivo) {
+              lg.addLayer(makeLabel(centroid, p.cultivo, col));
+            }
+          }
+        }).addTo(map);
+
+        lg.addTo(map);
+        applyLabelZoom();
+        return;
+      }
+
+      /* ── PREDIOS: polígonos + etiqueta del nombre ── */
+      if (layerName === 'predios') {
+        const lg = L.layerGroup();
+        labelGroups[layerName] = lg;
+
+        activeLayers[layerName] = L.geoJSON(geojson, {
+          style: stylePredios,
+          onEachFeature: (f, l) => {
+            const p = f.properties;
+            l.bindPopup(
+              '<div class="popup-title">🏞️ ' + (p.predio||'—') + '</div>' +
+              '<div class="popup-row"><span class="popup-key">Municipio</span><span class="popup-val">'   + (p.municipio||'—')   + '</span></div>' +
+              '<div class="popup-row"><span class="popup-key">Vereda</span><span class="popup-val">'      + (p.vereda||'—')      + '</span></div>' +
+              '<div class="popup-row"><span class="popup-key">Propietario</span><span class="popup-val">' + (p.propietari||'—')  + '</span></div>' +
+              '<div class="popup-row"><span class="popup-key">Área</span><span class="popup-val">'        + (p.has||'—') + ' ha</span></div>'
+            );
+
+            const centroid = getCentroid(f);
+            if (centroid && p.predio) {
+              lg.addLayer(makeLabel(centroid, p.predio, '#10b981'));
+            }
+          }
+        }).addTo(map);
+
+        lg.addTo(map);
+        applyLabelZoom();
+        return;
+      }
+
+    } else {
+      /* Desactivar: remover capa y etiquetas */
+      if (activeLayers[layerName])  map.removeLayer(activeLayers[layerName]);
+      if (labelGroups[layerName])   map.removeLayer(labelGroups[layerName]);
+    }
+  };
+
+  function refreshLayer(name) {
+    const cbId = name === 'reportes_sbn' ? 'layer_reportes' : 'layer_' + name;
+    const el = document.getElementById(cbId);
+    if (el && el.checked && activeLayers[name]) {
+      map.removeLayer(activeLayers[name]);
+      if (labelGroups[name]) { map.removeLayer(labelGroups[name]); delete labelGroups[name]; }
+      delete activeLayers[name];
+      toggleLayer(name);
+    }
+  }
+
+  function refreshAllActive() {
+    ['predios','usos_suelo','reportes_sbn'].forEach(n => refreshLayer(n));
+  }
+
+  /* ═══ GPS ═══ */
+  window.getCurrentLocation = function() {
+    if (!navigator.geolocation) { showToast('❌ Geolocalización no soportada'); return; }
+    showToast('📡 Obteniendo ubicación…');
+    navigator.geolocation.getCurrentPosition(pos => {
+      document.getElementById('toast').classList.remove('show');
+      const { latitude:lat, longitude:lng } = pos.coords;
+      map.flyTo([lat, lng], 15, { duration:1.5 });
+      L.circleMarker([lat, lng], { radius:10, fillColor:'#00e5ff', color:'#fff', weight:2, fillOpacity:0.9 })
+        .addTo(map).bindPopup('<div class="popup-title">📍 Tu ubicación actual</div>').openPopup();
+    }, err => {
+      document.getElementById('toast').classList.remove('show');
+      showToast('❌ ' + err.message);
+    });
+  };
+
+  /* ═══ TOAST ═══ */
+  let _tt = null;
+  function showToast(msg, persist) {
+    const t = document.getElementById('toast');
+    t.innerHTML = msg; t.classList.add('show');
+    clearTimeout(_tt);
+    if (!persist) _tt = setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  /* ═══ DIBUJO ═══ */
+  const drawnItems = new L.FeatureGroup().addTo(map);
+  map.addControl(new L.Control.Draw({
+    position: 'topright',
+    draw: {
+      polygon: { allowIntersection:false, shapeOptions:{ color:'#42a5f5', weight:2.5, fillOpacity:0.1, fillColor:'#42a5f5' } },
+      polyline:false, rectangle:false, circle:false, marker:false, circlemarker:false
+    },
+    edit: { featureGroup:drawnItems, remove:true }
+  }));
+  let pendingPolygon = null;
+
+  map.on(L.Draw.Event.CREATED, e => {
+    if (!(e.layer instanceof L.Polygon)) { showToast('⚠️ Solo se permiten polígonos'); return; }
+    pendingPolygon = e.layer;
+    openEditModal(document.querySelector('input[name="drawLayer"]:checked').value);
+  });
+
+  window.clearDrawings = () => { drawnItems.clearLayers(); pendingPolygon = null; };
+
+  /* ═══ MODAL EDICIÓN ═══ */
+  async function openEditModal(layerType) {
+    const area = pendingPolygon ? Math.round((turf.area(pendingPolygon.toGeoJSON()) / 10000) * 100) / 100 : 0;
+    document.getElementById('areaNum').textContent    = area;
+    document.getElementById('modalTitle').textContent = layerType === 'predios' ? 'Nuevo Predio' : 'Nuevo Uso de Suelo';
+    document.getElementById('modalBadge').textContent = layerType === 'predios' ? 'PREDIO' : 'USO DE SUELO';
+    const form = document.getElementById('editForm');
+
+    if (layerType === 'predios') {
+      let municipios = [];
+      if (navigator.onLine) { const { data } = await sb.from('municipios').select('id,nombre'); municipios = data || []; }
+      const opts = '<option value="">Seleccione municipio</option>' + municipios.map(m => '<option value="' + m.id + '">' + m.nombre + '</option>').join('');
+      form.innerHTML =
+        '<div class="form-group"><label class="form-label">Nombre del predio *</label><input type="text" id="f_nombre" class="form-input" placeholder="Ej: La Esperanza"></div>' +
+        '<div class="form-group"><label class="form-label">Municipio *</label><select id="f_municipio" class="form-select">' + opts + '</select></div>' +
+        '<div class="form-group"><label class="form-label">Vereda</label><input type="text" id="f_vereda" class="form-input" placeholder="Vereda"></div>' +
+        '<div class="form-group"><label class="form-label">Propietario</label><input type="text" id="f_propietario" class="form-input" placeholder="Nombre completo"></div>' +
+        '<div class="form-group"><label class="form-label">Cédula</label><input type="text" id="f_cedula" class="form-input" placeholder="Número de documento"></div>' +
+        '<div class="form-group"><label class="form-label">Área (hectáreas) *</label><input type="number" step="0.01" id="f_has" class="form-input" value="' + area + '"></div>';
+    } else {
+      let predios = [];
+      if (navigator.onLine) { const { data } = await sb.from('predios').select('id,predio'); predios = data || []; }
+      const predOpts = '<option value="">Sin asociar</option>' + predios.map(p => '<option value="' + p.id + '">' + (p.predio || 'Predio ' + p.id) + '</option>').join('');
+      const culOpts  = '<option value="">Seleccione cultivo</option>' + Object.keys(cultivoColors).map(c => '<option value="' + c + '">' + c + '</option>').join('');
+      form.innerHTML =
+        '<div class="form-group"><label class="form-label">Cultivo *</label><select id="f_cultivo" class="form-select">' + culOpts + '</select></div>' +
+        '<div class="form-group"><label class="form-label">Área (hectáreas) *</label><input type="number" step="0.01" id="f_has" class="form-input" value="' + area + '"></div>' +
+        '<div class="form-group"><label class="form-label">Predio asociado</label><select id="f_predio" class="form-select">' + predOpts + '</select></div>';
+    }
+
+    document.getElementById('editModal').classList.add('show');
+    document.getElementById('btnSave').dataset.type = layerType;
+  }
+
+  window.closeModal = () => { document.getElementById('editModal').classList.remove('show'); pendingPolygon = null; };
+
+  window.submitModal = async () => {
+    const type = document.getElementById('btnSave').dataset.type;
+    const geom = { type:'MultiPolygon', coordinates:[pendingPolygon.toGeoJSON().geometry.coordinates] };
+
+    if (type === 'predios') {
+      const nombre = document.getElementById('f_nombre').value.trim();
+      const mun_id = parseInt(document.getElementById('f_municipio').value);
+      const has    = parseFloat(document.getElementById('f_has').value);
+      if (!nombre || !mun_id || isNaN(has)) { showToast('⚠️ Completa los campos obligatorios'); return; }
+      let munNombre = '';
+      if (navigator.onLine) { const { data } = await sb.from('municipios').select('nombre').eq('id', mun_id).single(); munNombre = data?.nombre || ''; }
+      await queueOrSave('predios', { predio:nombre, municipio:munNombre, vereda:document.getElementById('f_vereda').value||null, propietari:document.getElementById('f_propietario').value||null, cedula:document.getElementById('f_cedula').value||null, has, geom, id_municipio:mun_id });
+      refreshLayer('predios');
+    } else {
+      const cultivo = document.getElementById('f_cultivo').value;
+      const has     = parseFloat(document.getElementById('f_has').value);
+      if (!cultivo || isNaN(has)) { showToast('⚠️ Completa los campos obligatorios'); return; }
+      const id_predio = document.getElementById('f_predio').value ? parseInt(document.getElementById('f_predio').value) : null;
+      await queueOrSave('usos_suelo', { cultivo, has, geom, id_predio });
+      refreshLayer('usos_suelo');
+    }
+
+    drawnItems.addLayer(pendingPolygon);
+    pendingPolygon = null;
+    closeModal();
+    showToast('✅ Guardado correctamente');
+  };
+
+  /* ═══ REPORTE ═══ */
+  let reporteCoords = null, reportSelecting = false, tempMarker = null;
+
+  window.startReportSelection = function() {
+    if (reportSelecting) { cancelReportSelection(); return; }
+    reportSelecting = true;
+    const t = document.getElementById('toast');
+    t.innerHTML = '📍 Haz clic en el mapa para ubicar el reporte &nbsp;<span class="toast-cancel" onclick="cancelReportSelection()">Cancelar</span>';
+    t.classList.add('show');
+    map.on('click', onMapClickReport);
+    if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
+  };
+
+  window.cancelReportSelection = function() {
+    reportSelecting = false;
+    map.off('click', onMapClickReport);
+    document.getElementById('toast').classList.remove('show');
+  };
+
+  function onMapClickReport(e) {
+    reporteCoords = { lat:e.latlng.lat, lng:e.latlng.lng };
+    if (tempMarker) map.removeLayer(tempMarker);
+    tempMarker = L.circleMarker([reporteCoords.lat, reporteCoords.lng], { radius:10, fillColor:'#ef4444', color:'#fff', weight:2, fillOpacity:0.9 }).addTo(map);
+    cancelReportSelection();
+    document.getElementById('coordDisplay').textContent = '📍 ' + reporteCoords.lat.toFixed(6) + ', ' + reporteCoords.lng.toFixed(6);
+    document.getElementById('reporteForm').reset();
+    document.getElementById('reporteModal').classList.add('show');
+  }
+
+  window.closeReporteModal = function() {
+    document.getElementById('reporteModal').classList.remove('show');
+    if (tempMarker) { map.removeLayer(tempMarker); tempMarker = null; }
+    reporteCoords = null;
+  };
+
+  window.saveReporte = async function() {
+    if (!reporteCoords) { showToast('⚠️ Selecciona una ubicación en el mapa'); return; }
+    const nombre = document.getElementById('reporte_nombre').value.trim();
+    const tipo   = document.getElementById('reporte_tipo').value;
+    if (!nombre || !tipo) { showToast('⚠️ Completa los campos obligatorios'); return; }
+    await queueOrSave('reportes_sbn', { nombre, tipo_requerimiento:tipo, comentarios:document.getElementById('reporte_comentarios').value||null, lat:reporteCoords.lat, long:reporteCoords.lng });
+    closeReporteModal();
+    refreshLayer('reportes_sbn');
+    showToast('✅ Reporte guardado');
+  };
+
+  /* ═══ BÚSQUEDA ═══ */
+  document.getElementById('searchInput').addEventListener('input', async e => {
+    const term = e.target.value.trim();
+    const list = document.getElementById('searchResults');
+    if (term.length < 2) { list.innerHTML = ''; list.classList.remove('has-results'); return; }
+    if (!navigator.onLine) { list.innerHTML = '<li>Solo disponible en línea</li>'; list.classList.add('has-results'); return; }
+    try {
+      const { data } = await sb.rpc('search_predios', { search_term:term });
+      if (!data || !data.length) { list.innerHTML = '<li>Sin resultados</li>'; list.classList.add('has-results'); return; }
+      list.innerHTML = data.map(p =>
+        '<li data-lat="' + p.centroid_lat + '" data-lng="' + p.centroid_lng + '" data-nombre="' + p.predio + '" data-prop="' + (p.propietari||'N/A') + '" data-has="' + (p.has||'N/A') + '" data-municipio="' + (p.municipio||'N/A') + '">' +
+        '<strong>' + p.predio + '</strong><span>' + p.municipio + ' · ' + p.has + ' ha</span></li>'
+      ).join('');
+      list.classList.add('has-results');
+      list.querySelectorAll('li').forEach(li => {
+        li.addEventListener('click', () => {
+          map.flyTo([parseFloat(li.dataset.lat), parseFloat(li.dataset.lng)], 15, { duration:1.5 });
+          L.popup().setLatLng([parseFloat(li.dataset.lat), parseFloat(li.dataset.lng)]).setContent(
+            '<div class="popup-title">🏞️ ' + li.dataset.nombre + '</div>' +
+            '<div class="popup-row"><span class="popup-key">Propietario</span><span class="popup-val">' + li.dataset.prop + '</span></div>' +
+            '<div class="popup-row"><span class="popup-key">Área</span><span class="popup-val">' + li.dataset.has + ' ha</span></div>' +
+            '<div class="popup-row"><span class="popup-key">Municipio</span><span class="popup-val">' + li.dataset.municipio + '</span></div>'
+          ).openOn(map);
+          list.innerHTML = ''; list.classList.remove('has-results');
+          document.getElementById('searchInput').value = '';
+        });
+      });
+    } catch(err) { list.innerHTML = '<li style="color:#ef9a9a">Error al buscar</li>'; list.classList.add('has-results'); }
+  });
+
+  /* ═══ HELPERS ═══ */
+  function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+</script>
+</body>
+</html>
