@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Geoportal SBN — Reportes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root{
+      --navy:#060d1f;--deep:#0a1628;--mid:#0d2144;
+      --azure:#1565c0;--sky:#1e88e5;--ice:#42a5f5;
+      --white:#e8f4fd;--glass:rgba(255,255,255,0.04);--glass2:rgba(255,255,255,0.07);
+      --border:rgba(66,165,245,0.15);--accent:#00e5ff;
+    }
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    html,body{min-height:100%;font-family:'DM Sans',sans-serif;background:var(--navy);color:var(--white)}
+
+    /* BG */
+    .bg{position:fixed;inset:0;z-index:0;
+      background:radial-gradient(ellipse 60% 50% at 0% 0%,rgba(14,58,110,0.4) 0%,transparent 60%),
+                 radial-gradient(ellipse 50% 40% at 100% 100%,rgba(21,101,192,0.25) 0%,transparent 60%),var(--navy)}
+    .grid{position:fixed;inset:0;z-index:1;
+      background-image:linear-gradient(rgba(30,136,229,0.05) 1px,transparent 1px),
+                       linear-gradient(90deg,rgba(30,136,229,0.05) 1px,transparent 1px);
+      background-size:48px 48px;
+      mask-image:radial-gradient(ellipse 100% 100% at 50% 0%,black 50%,transparent 100%)}
+
+    /* HEADER */
+    .hdr{position:sticky;top:0;z-index:200;height:52px;background:rgba(6,13,31,0.95);
+      border-bottom:1px solid var(--border);backdrop-filter:blur(20px);
+      display:flex;align-items:center;padding:0 20px;gap:12px}
+    .logo{display:flex;align-items:center;gap:10px}
+    .lm{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--azure),var(--ice));
+      display:flex;align-items:center;justify-content:center;font-size:15px}
+    .lt{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;letter-spacing:-0.02em}
+    .ls{font-size:9px;color:rgba(232,244,253,0.35);display:block}
+    .hdiv{width:1px;height:22px;background:var(--border)}
+    .htitle{font-family:'Syne',sans-serif;font-size:14px;font-weight:600;color:var(--ice);letter-spacing:-0.01em}
+    .sp{flex:1}
+    .hb{padding:6px 14px;background:var(--glass2);border:1px solid var(--border);border-radius:8px;
+      color:rgba(232,244,253,0.75);font-family:'DM Sans',sans-serif;font-size:12px;
+      cursor:pointer;transition:all .2s;text-decoration:none;display:inline-flex;align-items:center;gap:5px}
+    .hb:hover{background:rgba(255,255,255,0.1);color:var(--white)}
+    .hb.pri{background:rgba(21,101,192,0.25);border-color:rgba(66,165,245,0.35);color:var(--ice)}
+    .hb.pri:hover{background:rgba(21,101,192,0.4)}
+
+    /* PAGE */
+    .page{position:relative;z-index:10;max-width:1100px;margin:0 auto;padding:32px 20px 80px}
+
+    /* HERO */
+    .hero{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:28px;gap:16px;flex-wrap:wrap}
+    .eyebrow{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);font-weight:600;
+      margin-bottom:8px;display:flex;align-items:center;gap:6px}
+    .eyebrow::before{content:'';width:16px;height:1px;background:var(--accent);box-shadow:0 0 4px var(--accent)}
+    .ptitle{font-family:'Syne',sans-serif;font-size:clamp(24px,4vw,34px);font-weight:800;letter-spacing:-0.03em;line-height:1.1}
+    .ptitle span{background:linear-gradient(135deg,var(--ice),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .psub{font-size:13px;color:rgba(232,244,253,0.4);margin-top:6px;font-weight:300}
+
+    /* SECTION DIVIDER */
+    .sdiv{margin:44px 0 22px;display:flex;align-items:center;gap:16px}
+    .sdiv-line{flex:1;height:1px;background:var(--border)}
+    .sdiv-title{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;letter-spacing:-0.02em;white-space:nowrap}
+    .sdiv-title span{background:linear-gradient(135deg,var(--ice),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+
+    /* STATS ROW */
+    .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px}
+    .sc{background:var(--glass2);border:1px solid var(--border);border-radius:12px;padding:16px 18px;
+      transition:border-color .2s;animation:fadeUp .4s forwards;opacity:0}
+    .sc:hover{border-color:rgba(66,165,245,0.3)}
+    .sc:nth-child(1){animation-delay:.05s}.sc:nth-child(2){animation-delay:.10s}
+    .sc:nth-child(3){animation-delay:.15s}.sc:nth-child(4){animation-delay:.20s}
+    .sc:nth-child(5){animation-delay:.25s}.sc:nth-child(6){animation-delay:.30s}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    .snum{font-family:'Syne',sans-serif;font-size:26px;font-weight:800;color:var(--ice);letter-spacing:-0.03em;line-height:1}
+    .slbl{font-size:11px;color:rgba(232,244,253,0.35);margin-top:4px;font-weight:300}
+    .sico{font-size:18px;margin-bottom:8px}
+
+    /* FILTERS */
+    .fbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+    .fi{flex:1;min-width:180px;max-width:320px;padding:9px 14px;background:rgba(255,255,255,0.04);
+      border:1px solid var(--border);border-radius:9px;color:var(--white);font-family:'DM Sans',sans-serif;
+      font-size:13px;outline:none;transition:border-color .2s}
+    .fi::placeholder{color:rgba(232,244,253,0.2)}
+    .fi:focus{border-color:var(--ice);background:rgba(255,255,255,0.07)}
+    .fsel{padding:9px 14px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:9px;
+      color:rgba(232,244,253,0.7);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;cursor:pointer}
+    .fsel option{background:#0d2144;color:var(--white)}
+
+    /* TABLE */
+    .tw{background:rgba(10,22,40,0.7);border:1px solid var(--border);border-radius:14px;overflow:hidden;
+      animation:fadeUp .5s .2s forwards;opacity:0;margin-bottom:0}
+    .ts{overflow-x:auto}
+    table{width:100%;border-collapse:collapse}
+    thead tr{background:rgba(21,101,192,0.1);border-bottom:1px solid var(--border)}
+    th{padding:12px 16px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+      color:rgba(232,244,253,0.4);font-weight:600;text-align:left;white-space:nowrap}
+    tbody tr{border-bottom:1px solid rgba(66,165,245,0.07);transition:background .15s}
+    tbody tr:last-child{border-bottom:none}
+    tbody tr:hover{background:rgba(21,101,192,0.08)}
+    td{padding:13px 16px;font-size:13px;color:rgba(232,244,253,0.8);vertical-align:middle}
+    .tdn{font-weight:500;color:var(--white)}
+    .tdd{font-size:12px;color:rgba(232,244,253,0.4);white-space:nowrap}
+    .tdc{font-size:11px;color:rgba(232,244,253,0.35);font-family:monospace}
+
+    /* TIPO BADGES — nuevos tipos SbN */
+    .tb{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:100px;font-size:11px;font-weight:500}
+    .tb-sbn-l{background:rgba(66,165,245,0.12);color:var(--ice);border:1px solid rgba(66,165,245,0.25)}
+    .tb-sbn-p{background:rgba(0,229,255,0.1);color:#80deea;border:1px solid rgba(0,229,255,0.2)}
+    .tb-sbn-pt{background:rgba(100,220,180,0.1);color:#80cbc4;border:1px solid rgba(100,220,180,0.2)}
+    .tb-otras{background:rgba(255,255,255,0.06);color:rgba(232,244,253,0.5);border:1px solid var(--border)}
+
+    /* CULTIVO SWATCH */
+    .csw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle;flex-shrink:0}
+
+    /* EMPTY */
+    .empty{padding:50px 20px;text-align:center;color:rgba(232,244,253,0.3)}
+    .empty-ico{font-size:44px;margin-bottom:10px}
+    .empty-txt{font-size:13px}
+
+    /* LOADING */
+    .lrow td{text-align:center;padding:36px;color:rgba(232,244,253,0.3);font-size:13px}
+    .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(66,165,245,0.2);
+      border-top-color:var(--ice);border-radius:50%;animation:spin .7s linear infinite;margin-right:8px;vertical-align:middle}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* DELETE */
+    .bdel{padding:5px 10px;background:rgba(244,67,54,0.08);border:1px solid rgba(244,67,54,0.2);
+      border-radius:7px;color:#ef9a9a;font-family:'DM Sans',sans-serif;font-size:11px;cursor:pointer;transition:all .2s}
+    .bdel:hover{background:rgba(244,67,54,0.18);color:#ffcdd2}
+
+    /* PAGINATION */
+    .pag{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;
+      border-top:1px solid rgba(66,165,245,0.07);font-size:12px;color:rgba(232,244,253,0.35)}
+    .pbts{display:flex;gap:6px}
+    .pbtn{width:30px;height:30px;border-radius:7px;background:rgba(255,255,255,0.04);
+      border:1px solid var(--border);color:rgba(232,244,253,0.6);cursor:pointer;
+      display:flex;align-items:center;justify-content:center;font-size:13px;transition:all .2s}
+    .pbtn:hover:not(:disabled){background:rgba(21,101,192,0.2);color:var(--white)}
+    .pbtn:disabled{opacity:.3;cursor:not-allowed}
+    .pbtn.cur{background:var(--azure);color:white;border-color:var(--azure)}
+
+    /* TOAST */
+    .toast{position:fixed;bottom:24px;right:24px;background:rgba(10,22,40,0.97);
+      border:1px solid var(--border);backdrop-filter:blur(16px);padding:12px 18px;border-radius:10px;
+      font-size:13px;z-index:9999;display:none;align-items:center;gap:8px;
+      box-shadow:0 8px 32px rgba(0,0,0,0.4);max-width:320px;animation:tslide .3s ease}
+    .toast.on{display:flex}
+    @keyframes tslide{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+
+    /* MODAL */
+    .mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(6px);
+      z-index:9000;align-items:center;justify-content:center}
+    .mo.on{display:flex}
+    .mc{background:#0a1628;border:1px solid var(--border);border-radius:16px;width:480px;max-width:92vw;
+      max-height:88vh;overflow-y:auto;box-shadow:0 24px 80px rgba(0,0,0,0.6);animation:min .3s ease}
+    @keyframes min{from{opacity:0;transform:scale(.95) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)}}
+    .mh{padding:20px 20px 0;display:flex;justify-content:space-between;align-items:flex-start}
+    .mt{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;letter-spacing:-0.02em}
+    .mb{display:inline-block;padding:3px 9px;border-radius:100px;font-size:10px;letter-spacing:.08em;
+      background:rgba(21,101,192,0.2);border:1px solid rgba(66,165,245,0.25);color:var(--ice);margin-top:4px}
+    .mx{width:30px;height:30px;border-radius:8px;background:rgba(255,255,255,0.05);
+      border:1px solid var(--border);color:rgba(232,244,253,0.5);cursor:pointer;display:flex;
+      align-items:center;justify-content:center;font-size:16px;transition:all .2s}
+    .mx:hover{background:rgba(255,255,255,0.1);color:var(--white)}
+    .mbody{padding:16px 20px 20px}
+    .fg{margin-bottom:14px}
+    .fl{display:block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+      color:rgba(232,244,253,0.4);font-weight:600;margin-bottom:6px}
+    .finp,.fsel2,.fta{width:100%;padding:11px 14px;background:rgba(255,255,255,0.04);
+      border:1px solid rgba(66,165,245,0.15);border-radius:9px;color:var(--white);
+      font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:border-color .2s}
+    .fsel2{cursor:pointer}
+    .fsel2 option{background:#0d2144;color:var(--white)}
+    .finp::placeholder,.fta::placeholder{color:rgba(232,244,253,0.2)}
+    .finp:focus,.fsel2:focus,.fta:focus{border-color:var(--ice);background:rgba(255,255,255,0.07)}
+    .fta{resize:vertical;min-height:80px}
+    .macts{display:flex;gap:8px;padding-top:4px}
+    .mcan{flex:1;padding:11px;background:rgba(255,255,255,0.04);border:1px solid var(--border);
+      border-radius:9px;color:rgba(232,244,253,0.6);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;transition:all .2s}
+    .mcan:hover{background:rgba(255,255,255,0.08);color:var(--white)}
+    .msav{flex:2;padding:11px;background:linear-gradient(135deg,var(--azure),var(--sky));border:none;
+      border-radius:9px;color:white;font-family:'Syne',sans-serif;font-size:13px;font-weight:600;
+      cursor:pointer;transition:all .2s;box-shadow:0 4px 16px rgba(21,101,192,0.3)}
+    .msav:hover{transform:translateY(-1px);box-shadow:0 6px 24px rgba(21,101,192,0.45)}
+
+    /* DETAIL FIELD */
+    .dfield{margin-bottom:10px}
+    .dfield .fl{margin-bottom:4px}
+    .dval{font-size:13px;color:var(--white);padding:10px 14px;background:rgba(255,255,255,0.03);
+      border:1px solid var(--border);border-radius:8px}
+
+    @media(max-width:600px){
+      .stats{grid-template-columns:repeat(2,1fr)}
+      .fbar{flex-direction:column}
+      .fi{max-width:100%}
+    }
+  </style>
+</head>
+<body>
+<div class="bg"></div><div class="grid"></div>
+
+<header class="hdr">
+  <div class="logo">
+    <div class="lm">🌿</div>
+    <div><div class="lt">Geoportal SBN</div><span class="ls">Biocomercio Sostenible</span></div>
+  </div>
+  <div class="hdiv"></div>
+  <span class="htitle">📋 Panel de Avances</span>
+  <div class="sp"></div>
+  <a href="app.html" class="hb pri">🗺️ Volver al mapa</a>
+  <button class="hb" onclick="openNewModal()">➕ Nuevo reporte</button>
+  <button class="hb" onclick="doLogout()" style="color:#ef9a9a">Salir</button>
+</header>
+
+<main class="page">
+
+  <!-- ══ SECCIÓN 1: REPORTES SBN ══ -->
+  <div class="hero">
+    <div>
+      <div class="eyebrow">Sistema de Biocomercio Nacional</div>
+      <h1 class="ptitle">Reportes <span>SBN</span></h1>
+      <p class="psub">Seguimiento de reportes de campo geolocalizados</p>
+    </div>
+    <button class="hb pri" onclick="exportCSV('rep')" style="height:fit-content">⬇️ Exportar CSV</button>
+  </div>
+
+  <div class="stats" id="statsRep">
+    <div class="sc"><div class="sico">📋</div><div class="snum" id="r-total">—</div><div class="slbl">Reportes totales</div></div>
+    <div class="sc"><div class="sico">〰️</div><div class="snum" id="r-linea">—</div><div class="slbl">SbN línea</div></div>
+    <div class="sc"><div class="sico">⬡</div><div class="snum" id="r-poli">—</div><div class="slbl">SbN poligonal</div></div>
+    <div class="sc"><div class="sico">📌</div><div class="snum" id="r-punt">—</div><div class="slbl">SbN puntual</div></div>
+    <div class="sc"><div class="sico">📝</div><div class="snum" id="r-otras">—</div><div class="slbl">Otras</div></div>
+    <div class="sc"><div class="sico">📅</div><div class="snum" id="r-mes">—</div><div class="slbl">Este mes</div></div>
+  </div>
+
+  <div class="fbar">
+    <input type="text" id="rFiltTxt" class="fi" placeholder="🔍 Buscar por nombre o comentario…" oninput="filterRep()">
+    <select id="rFiltTipo" class="fsel" onchange="filterRep()">
+      <option value="">Todos los tipos</option>
+      <option value="SbN línea">SbN línea</option>
+      <option value="SbN poligonal">SbN poligonal</option>
+      <option value="SbN puntual">SbN puntual</option>
+      <option value="Otras">Otras</option>
+    </select>
+    <select id="rFiltSort" class="fsel" onchange="filterRep()">
+      <option value="desc">Más recientes primero</option>
+      <option value="asc">Más antiguos primero</option>
+    </select>
+  </div>
+
+  <div class="tw">
+    <div class="ts">
+      <table>
+        <thead><tr><th>#</th><th>Nombre</th><th>Tipo</th><th>Comentarios</th><th>Coordenadas</th><th>Fecha</th><th></th></tr></thead>
+        <tbody id="tbRep"><tr class="lrow"><td colspan="7"><span class="spinner"></span> Cargando reportes…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pag" id="pagRep"></div>
+  </div>
+
+  <!-- ══ SECCIÓN 2: USOS DE SUELO ══ -->
+  <div class="sdiv">
+    <div class="sdiv-line"></div>
+    <div class="sdiv-title">Avance Usos de <span>Suelo</span></div>
+    <div class="sdiv-line"></div>
+  </div>
+
+  <div class="stats" id="statsUso">
+    <div class="sc"><div class="sico">🌾</div><div class="snum" id="u-total">—</div><div class="slbl">Registros totales</div></div>
+    <div class="sc"><div class="sico">📐</div><div class="snum" id="u-has">—</div><div class="slbl">Hectáreas totales</div></div>
+    <div class="sc"><div class="sico">🌱</div><div class="snum" id="u-cult">—</div><div class="slbl">Tipos de cultivo</div></div>
+    <div class="sc"><div class="sico">📅</div><div class="snum" id="u-mes">—</div><div class="slbl">Este mes</div></div>
+  </div>
+
+  <div class="fbar">
+    <input type="text" id="uFiltTxt" class="fi" placeholder="🔍 Buscar por cultivo o predio…" oninput="filterUso()">
+    <select id="uFiltCul" class="fsel" onchange="filterUso()">
+      <option value="">Todos los cultivos</option>
+    </select>
+    <select id="uFiltSort" class="fsel" onchange="filterUso()">
+      <option value="desc">Más recientes primero</option>
+      <option value="asc">Más antiguos primero</option>
+    </select>
+    <button class="hb pri" onclick="exportCSV('uso')" style="height:fit-content">⬇️ CSV</button>
+  </div>
+
+  <div class="tw">
+    <div class="ts">
+      <table>
+        <thead><tr><th>#</th><th>Cultivo</th><th>Hectáreas</th><th>Predio asociado</th><th>Municipio</th><th>Fecha</th><th></th></tr></thead>
+        <tbody id="tbUso"><tr class="lrow"><td colspan="7"><span class="spinner"></span> Cargando usos de suelo…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pag" id="pagUso"></div>
+  </div>
+
+  <!-- ══ SECCIÓN 3: PREDIOS ══ -->
+  <div class="sdiv">
+    <div class="sdiv-line"></div>
+    <div class="sdiv-title">Avance <span>Predios</span></div>
+    <div class="sdiv-line"></div>
+  </div>
+
+  <div class="stats" id="statsPre">
+    <div class="sc"><div class="sico">🏞️</div><div class="snum" id="p-total">—</div><div class="slbl">Predios registrados</div></div>
+    <div class="sc"><div class="sico">📐</div><div class="snum" id="p-has">—</div><div class="slbl">Hectáreas totales</div></div>
+    <div class="sc"><div class="sico">🏘️</div><div class="snum" id="p-mun">—</div><div class="slbl">Municipios</div></div>
+    <div class="sc"><div class="sico">📅</div><div class="snum" id="p-mes">—</div><div class="slbl">Este mes</div></div>
+  </div>
+
+  <div class="fbar">
+    <input type="text" id="pFiltTxt" class="fi" placeholder="🔍 Buscar por nombre, municipio o propietario…" oninput="filterPre()">
+    <select id="pFiltMun" class="fsel" onchange="filterPre()">
+      <option value="">Todos los municipios</option>
+    </select>
+    <select id="pFiltSort" class="fsel" onchange="filterPre()">
+      <option value="desc">Más recientes primero</option>
+      <option value="asc">Más antiguos primero</option>
+    </select>
+    <button class="hb pri" onclick="exportCSV('pre')" style="height:fit-content">⬇️ CSV</button>
+  </div>
+
+  <div class="tw" style="margin-bottom:60px">
+    <div class="ts">
+      <table>
+        <thead><tr><th>#</th><th>Nombre predio</th><th>Municipio</th><th>Vereda</th><th>Propietario</th><th>Área (ha)</th><th>Fecha</th><th></th></tr></thead>
+        <tbody id="tbPre"><tr class="lrow"><td colspan="8"><span class="spinner"></span> Cargando predios…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pag" id="pagPre"></div>
+  </div>
+
+</main>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- MODAL: Nuevo reporte -->
+<div class="mo" id="newModal">
+  <div class="mc">
+    <div class="mh">
+      <div><div class="mt">Nuevo Reporte SBN</div><div class="mb">NUEVO REGISTRO</div></div>
+      <button class="mx" onclick="closeNewModal()">✕</button>
+    </div>
+    <div class="mbody">
+      <div class="fg"><label class="fl">Nombre *</label>
+        <input type="text" id="m_nombre" class="finp" placeholder="Nombre del reporte"></div>
+      <div class="fg"><label class="fl">Tipo de requerimiento *</label>
+        <select id="m_tipo" class="fsel2">
+          <option value="">Seleccione tipo</option>
+          <option value="SbN línea">SbN línea</option>
+          <option value="SbN poligonal">SbN poligonal</option>
+          <option value="SbN puntual">SbN puntual</option>
+          <option value="Otras">Otras</option>
+        </select></div>
+      <div class="fg"><label class="fl">Comentarios</label>
+        <textarea id="m_coment" class="fta" placeholder="Describe el requerimiento…"></textarea></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="fg"><label class="fl">Latitud</label>
+          <input type="number" step="any" id="m_lat" class="finp" placeholder="4.600000"></div>
+        <div class="fg"><label class="fl">Longitud</label>
+          <input type="number" step="any" id="m_lng" class="finp" placeholder="-74.100000"></div>
+      </div>
+      <div class="macts">
+        <button class="mcan" onclick="closeNewModal()">Cancelar</button>
+        <button class="msav" onclick="saveNewReporte()">Guardar reporte →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Detalle reporte -->
+<div class="mo" id="detModal">
+  <div class="mc">
+    <div class="mh">
+      <div><div class="mt" id="detTitle">Detalle</div><div class="mb" id="detBadge"></div></div>
+      <button class="mx" onclick="closeDetModal()">✕</button>
+    </div>
+    <div class="mbody" id="detBody"></div>
+  </div>
+</div>
+
+<script>
+  const SB_URL = "https://nyqzlkfphssodbsgeeob.supabase.co";
+  const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55cXpsa2ZwaHNzb2Ric2dlZW9iIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxMzg5ODAsImV4cCI6MjA4OTcxNDk4MH0.D0mv8NNf3w362u1Q9PRcy9H_vO46u6jIva3SpMaKLng";
+  const sb = window.supabase.createClient(SB_URL, SB_KEY);
+
+  /* Auth guard */
+  if (!sessionStorage.getItem('guest')) {
+    sb.auth.getSession().then(({data})=>{ if(!data?.session) window.location.replace('index.html'); }).catch(()=>{});
+  }
+  async function doLogout(){await sb.auth.signOut().catch(()=>{});sessionStorage.removeItem('guest');window.location.replace('index.html')}
+
+  /* ═══ DATOS GLOBALES ═══ */
+  let repData=[], usoData=[], preData=[], prediosMap={};
+
+  /* ═══ COLORES CULTIVO ═══ */
+  const CC={'Pasto':'#8B4513','Forestales':'#228B22','Frijol':'#32CD32','Maiz':'#FFD700','Yuca':'#D2B48C',
+    'Aguacate':'#7CFC00','Caña':'#9ACD32','Palma de aceite':'#F4A460','Cacao':'#CD853F','Café':'#6F4E37',
+    'Frutales':'#FFA07A','Bosque natural':'#2E8B57','Bosque galeria':'#3CB371','Lago':'#4682B4','Pancoger':'#DEB887'};
+
+  /* ═══ LOAD — cada tabla se carga de forma independiente con fallback ═══
+     Si la tabla no tiene created_at (error 400), se reintenta sin order
+     y se ordena en cliente por id desc.
+  ═══════════════════════════════════════════════════════════════════════ */
+  async function safeLoad(table) {
+    // Intento 1: con order por created_at
+    let res = await sb.from(table).select('*').order('created_at', {ascending: false});
+    if (res.error) {
+      // Intento 2: sin order (puede que la columna no exista)
+      res = await sb.from(table).select('*');
+    }
+    if (res.error) throw new Error(table + ': ' + res.error.message + ' (código ' + res.error.code + ')');
+    const data = res.data || [];
+    // Ordenar en cliente: si tienen created_at usar esa, si no usar id desc
+    data.sort((a, b) => {
+      if (a.created_at && b.created_at) return new Date(b.created_at) - new Date(a.created_at);
+      return (b.id || 0) - (a.id || 0);
+    });
+    return data;
+  }
+
+  async function loadAll() {
+    // Cargar las tres tablas en paralelo, cada una con su propio manejo de error
+    const [rep, uso, pre] = await Promise.allSettled([
+      safeLoad('reportes_sbn'),
+      safeLoad('usos_suelo'),
+      safeLoad('predios')
+    ]);
+
+    if (rep.status === 'fulfilled') {
+      repData = rep.value;
+    } else {
+      console.error('reportes_sbn:', rep.reason);
+      showT('⚠️ Reportes: ' + rep.reason.message);
+      document.getElementById('tbRep').innerHTML =
+        '<tr><td colspan="7" style="text-align:center;color:#ef9a9a;padding:24px">❌ ' + rep.reason.message + '</td></tr>';
+    }
+
+    if (uso.status === 'fulfilled') {
+      usoData = uso.value;
+    } else {
+      console.error('usos_suelo:', uso.reason);
+      showT('⚠️ Usos de suelo: ' + uso.reason.message);
+      document.getElementById('tbUso').innerHTML =
+        '<tr><td colspan="7" style="text-align:center;color:#ef9a9a;padding:24px">❌ ' + uso.reason.message + '</td></tr>';
+    }
+
+    if (pre.status === 'fulfilled') {
+      preData = pre.value;
+      preData.forEach(p => { prediosMap[p.id] = p.predio || ('Predio ' + p.id); });
+    } else {
+      console.error('predios:', pre.reason);
+      showT('⚠️ Predios: ' + pre.reason.message);
+      document.getElementById('tbPre').innerHTML =
+        '<tr><td colspan="8" style="text-align:center;color:#ef9a9a;padding:24px">❌ ' + pre.reason.message + '</td></tr>';
+    }
+
+    // Renderizar lo que se cargó correctamente
+    buildRepStats(); filterRep();
+    buildUsoStats(); populateCultivoFilter(); filterUso();
+    buildPreStats(); populateMunFilter(); filterPre();
+  }
+
+  /* ═══ HELPERS ═══ */
+  const now = new Date();
+  function isMes(d){if(!d)return false;const x=new Date(d);return x.getMonth()===now.getMonth()&&x.getFullYear()===now.getFullYear()}
+  function fmt(d){if(!d)return '—';return new Date(d).toLocaleDateString('es-CO',{year:'numeric',month:'short',day:'numeric'})}
+  function fmtFull(d){if(!d)return '—';return new Date(d).toLocaleString('es-CO')}
+
+  /* ─── TIPO BADGE ─── */
+  function tipoBadge(t) {
+    const m={'SbN línea':'tb-sbn-l','SbN poligonal':'tb-sbn-p','SbN puntual':'tb-sbn-pt','Otras':'tb-otras'};
+    const cls=m[t]||'tb-otras';
+    return '<span class="tb '+cls+'">'+(t||'—')+'</span>';
+  }
+
+  /* ─── PAGINATION ─── */
+  const PS=15;
+  function renderPag(id,data,page,setPage,renderFn) {
+    const total=Math.ceil(data.length/PS);
+    const el=document.getElementById(id);
+    if(total<=1){el.innerHTML='<span>'+data.length+' registro(s)</span>';return}
+    let btns='';
+    for(let i=1;i<=total;i++){
+      if(i===1||i===total||Math.abs(i-page)<=1)
+        btns+='<button class="pbtn'+(i===page?' cur':'')+'" onclick="'+setPage+'('+i+')">'+i+'</button>';
+      else if(Math.abs(i-page)===2)
+        btns+='<span style="color:rgba(232,244,253,0.3);align-self:center">…</span>';
+    }
+    el.innerHTML='<span>'+data.length+' registro(s)</span><div class="pbts">'+
+      '<button class="pbtn" onclick="'+setPage+'('+(page-1)+')" '+(page===1?'disabled':'')+'>‹</button>'+
+      btns+
+      '<button class="pbtn" onclick="'+setPage+'('+(page+1)+')" '+(page===total?'disabled':'')+'>›</button></div>';
+  }
+
+  /* ══════════════════════════════════════
+     SECCIÓN 1: REPORTES SBN
+  ══════════════════════════════════════ */
+  let repFilt=[], repPage=1;
+
+  function buildRepStats() {
+    document.getElementById('r-total').textContent = repData.length;
+    document.getElementById('r-linea').textContent = repData.filter(r=>r.tipo_requerimiento==='SbN línea').length;
+    document.getElementById('r-poli').textContent  = repData.filter(r=>r.tipo_requerimiento==='SbN poligonal').length;
+    document.getElementById('r-punt').textContent  = repData.filter(r=>r.tipo_requerimiento==='SbN puntual').length;
+    document.getElementById('r-otras').textContent = repData.filter(r=>r.tipo_requerimiento==='Otras').length;
+    document.getElementById('r-mes').textContent   = repData.filter(r=>isMes(r.created_at)).length;
+  }
+
+  function filterRep() {
+    const txt  = document.getElementById('rFiltTxt').value.toLowerCase();
+    const tipo = document.getElementById('rFiltTipo').value;
+    const sort = document.getElementById('rFiltSort').value;
+    repFilt = repData.filter(r=>{
+      const mt=!txt||((r.nombre||'').toLowerCase().includes(txt)||(r.comentarios||'').toLowerCase().includes(txt));
+      const mti=!tipo||r.tipo_requerimiento===tipo;
+      return mt&&mti;
+    });
+    const cmpR=(a,b)=>a.created_at&&b.created_at?new Date(a.created_at)-new Date(b.created_at):(a.id||0)-(b.id||0);
+    if(sort==='asc') repFilt.sort(cmpR);
+    else             repFilt.sort((a,b)=>-cmpR(a,b));
+    repPage=1; renderRep();
+  }
+
+  function renderRep() {
+    const tb=document.getElementById('tbRep');
+    if(!repFilt.length){tb.innerHTML='<tr><td colspan="7"><div class="empty"><div class="empty-ico">🔍</div><div class="empty-txt">Sin reportes con los filtros actuales.</div></div></td></tr>';
+      document.getElementById('pagRep').innerHTML='';return}
+    const start=(repPage-1)*PS; const pg=repFilt.slice(start,start+PS);
+    tb.innerHTML=pg.map((r,i)=>`
+      <tr style="cursor:pointer" onclick="showRepDet(${r.id})">
+        <td style="color:rgba(232,244,253,0.3);font-size:11px">${start+i+1}</td>
+        <td class="tdn">${r.nombre||'—'}</td>
+        <td>${tipoBadge(r.tipo_requerimiento)}</td>
+        <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:rgba(232,244,253,0.5)">${r.comentarios||'<span style="color:rgba(232,244,253,0.2)">Sin comentarios</span>'}</td>
+        <td class="tdc">${r.lat?parseFloat(r.lat).toFixed(4)+', '+parseFloat(r.long).toFixed(4):'—'}</td>
+        <td class="tdd">${fmt(r.created_at)}</td>
+        <td onclick="event.stopPropagation()"><button class="bdel" onclick="delRep(${r.id})">🗑️</button></td>
+      </tr>`).join('');
+    renderPag('pagRep',repFilt,repPage,'goRepPag');
+  }
+  window.goRepPag=function(n){const t=Math.ceil(repFilt.length/PS);if(n<1||n>t)return;repPage=n;renderRep();window.scrollTo({top:0,behavior:'smooth'})}
+
+  function showRepDet(id) {
+    const r=repData.find(x=>x.id===id); if(!r) return;
+    document.getElementById('detTitle').textContent=r.nombre||'Reporte';
+    document.getElementById('detBadge').innerHTML=tipoBadge(r.tipo_requerimiento);
+    document.getElementById('detBody').innerHTML=
+      '<div style="display:grid;gap:10px;margin-bottom:16px">'+
+      dfield('Nombre',r.nombre)+
+      dfield('Tipo de requerimiento',r.tipo_requerimiento)+
+      dfield('Comentarios',r.comentarios||'—')+
+      dfield('Latitud',r.lat?parseFloat(r.lat).toFixed(6):'—')+
+      dfield('Longitud',r.long?parseFloat(r.long).toFixed(6):'—')+
+      dfield('Fecha de registro',fmtFull(r.created_at))+
+      (r.lat?'<div style="margin-top:4px"><a href="https://www.google.com/maps?q='+r.lat+','+r.long+'" target="_blank" style="color:var(--ice);font-size:12px;text-decoration:none">🗺️ Ver en Google Maps →</a></div>':'')+
+      '</div><div class="macts">'+
+      '<button class="mcan" onclick="closeDetModal()">Cerrar</button>'+
+      '<button class="msav" style="background:rgba(244,67,54,0.2);border:1px solid rgba(244,67,54,0.3);color:#ef9a9a;box-shadow:none" onclick="delRep('+r.id+');closeDetModal()">Eliminar</button>'+
+      '</div>';
+    document.getElementById('detModal').classList.add('on');
+  }
+
+  function dfield(label,val){
+    return '<div class="dfield"><div class="fl">'+label+'</div><div class="dval">'+val+'</div></div>';
+  }
+
+  function closeDetModal(){document.getElementById('detModal').classList.remove('on')}
+
+  async function delRep(id){
+    if(!confirm('¿Eliminar este reporte?')) return;
+    try{const{error}=await sb.from('reportes_sbn').delete().eq('id',id);if(error)throw error;
+      repData=repData.filter(r=>r.id!==id);buildRepStats();filterRep();showT('🗑️ Reporte eliminado');}
+    catch(e){showT('❌ '+e.message)}
+  }
+
+  /* ── Nuevo reporte ── */
+  function openNewModal(){document.getElementById('newModal').classList.add('on')}
+  function closeNewModal(){document.getElementById('newModal').classList.remove('on')}
+  async function saveNewReporte(){
+    const nombre=document.getElementById('m_nombre').value.trim();
+    const tipo=document.getElementById('m_tipo').value;
+    const coment=document.getElementById('m_coment').value.trim();
+    const lat=parseFloat(document.getElementById('m_lat').value);
+    const lng=parseFloat(document.getElementById('m_lng').value);
+    if(!nombre||!tipo){showT('⚠️ Nombre y tipo son obligatorios');return}
+    try{
+      const payload={nombre,tipo_requerimiento:tipo,comentarios:coment||null};
+      if(!isNaN(lat)) payload.lat=lat; if(!isNaN(lng)) payload.long=lng;
+      const{data,error}=await sb.from('reportes_sbn').insert([payload]).select(); if(error) throw error;
+      repData.unshift(data[0]); buildRepStats(); filterRep();
+      closeNewModal();
+      ['m_nombre','m_coment','m_lat','m_lng'].forEach(id=>document.getElementById(id).value='');
+      document.getElementById('m_tipo').value='';
+      showT('✅ Reporte guardado');
+    }catch(e){showT('❌ '+e.message)}
+  }
+
+  /* ══════════════════════════════════════
+     SECCIÓN 2: USOS DE SUELO
+  ══════════════════════════════════════ */
+  let usoFilt=[], usoPage=1;
+
+  function buildUsoStats(){
+    const totalHas=usoData.reduce((s,u)=>s+(parseFloat(u.has)||0),0);
+    const cults=new Set(usoData.map(u=>u.cultivo).filter(Boolean));
+    document.getElementById('u-total').textContent=usoData.length;
+    document.getElementById('u-has').textContent=totalHas.toFixed(1);
+    document.getElementById('u-cult').textContent=cults.size;
+    document.getElementById('u-mes').textContent=usoData.filter(u=>isMes(u.created_at)).length;
+  }
+  function populateCultivoFilter(){
+    const cults=[...new Set(usoData.map(u=>u.cultivo).filter(Boolean))].sort();
+    const sel=document.getElementById('uFiltCul');
+    sel.innerHTML='<option value="">Todos los cultivos</option>'+cults.map(c=>'<option value="'+c+'">'+c+'</option>').join('');
+  }
+  function filterUso(){
+    const txt=document.getElementById('uFiltTxt').value.toLowerCase();
+    const cul=document.getElementById('uFiltCul').value;
+    const sort=document.getElementById('uFiltSort').value;
+    usoFilt=usoData.filter(u=>{
+      const pt=prediosMap[u.id_predio]||'';
+      const mt=!txt||((u.cultivo||'').toLowerCase().includes(txt)||(pt).toLowerCase().includes(txt));
+      const mc=!cul||u.cultivo===cul;
+      return mt&&mc;
+    });
+    const cmpU=(a,b)=>a.created_at&&b.created_at?new Date(a.created_at)-new Date(b.created_at):(a.id||0)-(b.id||0);
+    if(sort==='asc') usoFilt.sort(cmpU);
+    else             usoFilt.sort((a,b)=>-cmpU(a,b));
+    usoPage=1; renderUso();
+  }
+  function renderUso(){
+    const tb=document.getElementById('tbUso');
+    if(!usoFilt.length){tb.innerHTML='<tr><td colspan="7"><div class="empty"><div class="empty-ico">🌾</div><div class="empty-txt">Sin registros.</div></div></td></tr>';document.getElementById('pagUso').innerHTML='';return}
+    const start=(usoPage-1)*PS; const pg=usoFilt.slice(start,start+PS);
+    const col=c=>CC[c]||'#f59e0b';
+    tb.innerHTML=pg.map((u,i)=>`
+      <tr>
+        <td style="color:rgba(232,244,253,0.3);font-size:11px">${start+i+1}</td>
+        <td class="tdn"><span class="csw" style="background:${col(u.cultivo)}"></span>${u.cultivo||'—'}</td>
+        <td style="font-family:'Syne',sans-serif;font-weight:700;color:var(--ice)">${parseFloat(u.has||0).toFixed(2)} ha</td>
+        <td style="font-size:12px;color:rgba(232,244,253,0.55)">${u.id_predio?(prediosMap[u.id_predio]||'ID '+u.id_predio):'<span style="color:rgba(232,244,253,0.2)">Sin asociar</span>'}</td>
+        <td style="font-size:12px;color:rgba(232,244,253,0.5)">${u.municipio||'—'}</td>
+        <td class="tdd">${fmt(u.created_at)}</td>
+        <td><button class="bdel" onclick="delUso(${u.id})">🗑️</button></td>
+      </tr>`).join('');
+    renderPag('pagUso',usoFilt,usoPage,'goUsoPag');
+  }
+  window.goUsoPag=function(n){const t=Math.ceil(usoFilt.length/PS);if(n<1||n>t)return;usoPage=n;renderUso()}
+  async function delUso(id){
+    if(!confirm('¿Eliminar este uso de suelo?')) return;
+    try{const{error}=await sb.from('usos_suelo').delete().eq('id',id);if(error)throw error;
+      usoData=usoData.filter(u=>u.id!==id);buildUsoStats();filterUso();showT('🗑️ Uso de suelo eliminado');}
+    catch(e){showT('❌ '+e.message)}
+  }
+
+  /* ══════════════════════════════════════
+     SECCIÓN 3: PREDIOS
+  ══════════════════════════════════════ */
+  let preFilt=[], prePage=1;
+
+  function buildPreStats(){
+    const totalHas=preData.reduce((s,p)=>s+(parseFloat(p.has)||0),0);
+    const muns=new Set(preData.map(p=>p.municipio).filter(Boolean));
+    document.getElementById('p-total').textContent=preData.length;
+    document.getElementById('p-has').textContent=totalHas.toFixed(1);
+    document.getElementById('p-mun').textContent=muns.size;
+    document.getElementById('p-mes').textContent=preData.filter(p=>isMes(p.created_at)).length;
+  }
+  function populateMunFilter(){
+    const muns=[...new Set(preData.map(p=>p.municipio).filter(Boolean))].sort();
+    const sel=document.getElementById('pFiltMun');
+    sel.innerHTML='<option value="">Todos los municipios</option>'+muns.map(m=>'<option value="'+m+'">'+m+'</option>').join('');
+  }
+  function filterPre(){
+    const txt=document.getElementById('pFiltTxt').value.toLowerCase();
+    const mun=document.getElementById('pFiltMun').value;
+    const sort=document.getElementById('pFiltSort').value;
+    preFilt=preData.filter(p=>{
+      const mt=!txt||((p.predio||'').toLowerCase().includes(txt)||(p.municipio||'').toLowerCase().includes(txt)||(p.propietari||'').toLowerCase().includes(txt));
+      const mm=!mun||p.municipio===mun;
+      return mt&&mm;
+    });
+    const cmpP=(a,b)=>a.created_at&&b.created_at?new Date(a.created_at)-new Date(b.created_at):(a.id||0)-(b.id||0);
+    if(sort==='asc') preFilt.sort(cmpP);
+    else             preFilt.sort((a,b)=>-cmpP(a,b));
+    prePage=1; renderPre();
+  }
+  function renderPre(){
+    const tb=document.getElementById('tbPre');
+    if(!preFilt.length){tb.innerHTML='<tr><td colspan="8"><div class="empty"><div class="empty-ico">🏞️</div><div class="empty-txt">Sin predios registrados.</div></div></td></tr>';document.getElementById('pagPre').innerHTML='';return}
+    const start=(prePage-1)*PS; const pg=preFilt.slice(start,start+PS);
+    tb.innerHTML=pg.map((p,i)=>`
+      <tr>
+        <td style="color:rgba(232,244,253,0.3);font-size:11px">${start+i+1}</td>
+        <td class="tdn">${p.predio||'—'}</td>
+        <td style="font-size:12px;color:rgba(232,244,253,0.65)">${p.municipio||'—'}</td>
+        <td style="font-size:12px;color:rgba(232,244,253,0.5)">${p.vereda||'—'}</td>
+        <td style="font-size:12px;color:rgba(232,244,253,0.5)">${p.propietari||'—'}</td>
+        <td style="font-family:'Syne',sans-serif;font-weight:700;color:var(--ice)">${parseFloat(p.has||0).toFixed(2)}</td>
+        <td class="tdd">${fmt(p.created_at)}</td>
+        <td><button class="bdel" onclick="delPre(${p.id})">🗑️</button></td>
+      </tr>`).join('');
+    renderPag('pagPre',preFilt,prePage,'goPrePag');
+  }
+  window.goPrePag=function(n){const t=Math.ceil(preFilt.length/PS);if(n<1||n>t)return;prePage=n;renderPre()}
+  async function delPre(id){
+    if(!confirm('¿Eliminar este predio? Se perderá su geometría.')) return;
+    try{const{error}=await sb.from('predios').delete().eq('id',id);if(error)throw error;
+      preData=preData.filter(p=>p.id!==id);delete prediosMap[id];buildPreStats();filterPre();showT('🗑️ Predio eliminado');}
+    catch(e){showT('❌ '+e.message)}
+  }
+
+  /* ══════════════════════════════════════
+     EXPORTAR CSV
+  ══════════════════════════════════════ */
+  function exportCSV(which){
+    let header,rows,fname;
+    if(which==='rep'){
+      if(!repFilt.length){showT('ℹ️ Sin datos para exportar');return}
+      header='ID,Nombre,Tipo,Comentarios,Latitud,Longitud,Fecha';
+      rows=repFilt.map(r=>r.id+',"'+(r.nombre||'')+'","'+(r.tipo_requerimiento||'')+'","'+
+        (r.comentarios||'').replace(/"/g,"'")+'",'+(r.lat||'')+','+(r.long||'')+',"'+fmtFull(r.created_at)+'"');
+      fname='reportes_sbn';
+    } else if(which==='uso'){
+      if(!usoFilt.length){showT('ℹ️ Sin datos para exportar');return}
+      header='ID,Cultivo,Hectareas,Predio,Municipio,Fecha';
+      rows=usoFilt.map(u=>u.id+',"'+(u.cultivo||'')+'",'+(u.has||'')+',"'+
+        (u.id_predio?(prediosMap[u.id_predio]||'ID '+u.id_predio):'')+'",'+(u.municipio||'')+',"'+fmtFull(u.created_at)+'"');
+      fname='usos_suelo';
+    } else {
+      if(!preFilt.length){showT('ℹ️ Sin datos para exportar');return}
+      header='ID,Predio,Municipio,Vereda,Propietario,Cedula,Hectareas,Fecha';
+      rows=preFilt.map(p=>p.id+',"'+(p.predio||'')+'","'+(p.municipio||'')+'","'+(p.vereda||'')+'","'+
+        (p.propietari||'')+'","'+(p.cedula||'')+'",'+(p.has||'')+',"'+fmtFull(p.created_at)+'"');
+      fname='predios';
+    }
+    const csv=[header,...rows].join('\n');
+    const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=fname+'_'+new Date().toISOString().split('T')[0]+'.csv';
+    a.click(); URL.revokeObjectURL(url);
+    showT('⬇️ CSV exportado');
+  }
+
+  /* TOAST */
+  function showT(msg){
+    const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');
+    setTimeout(()=>t.classList.remove('on'),3500);
+  }
+
+  /* INIT */
+  loadAll();
+</script>
+</body>
+</html>
