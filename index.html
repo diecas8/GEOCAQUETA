@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Geoportal APS — Acceso</title>
+    <style>
+        :root { --primary: #2E7D32; --bg: #f4f4f4; --text: #333; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        .container { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        h1, h2 { margin-bottom: 0.5rem; color: var(--primary); }
+        .logo { font-size: 1.2rem; font-weight: bold; margin-bottom: 1rem; display: block; }
+        .desc { font-size: 0.9rem; color: #666; margin-bottom: 1.5rem; line-height: 1.4; }
+        .features { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 1.5rem; font-size: 0.85rem; }
+        .feature { background: #e8f5e9; padding: 5px 10px; border-radius: 20px; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        button { width: 100%; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; touch-action: manipulation; }
+        button.secondary { background: white; color: var(--primary); border: 1px solid var(--primary); }
+        .divider { margin: 15px 0; color: #999; }
+        .footer { margin-top: 2rem; font-size: 0.75rem; color: #888; text-align: center; }
+        @media (max-width: 480px) {
+            .container { padding: 1.5rem; }
+            .features { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <span class="logo">Geoportal APS — Acceso</span>
+        <h2>Corporación Biocomercio Sostenible</h2>
+        <div class="desc">
+            GeoportalAPSColombia<br>
+            Plataforma geoespacial para la gestión de predios, usos de suelo y reportes de campo en tiempo real.
+        </div>
+        
+        <div class="features">
+            <span class="feature">🗺️ Capas vectoriales predios y usos de suelo</span>
+            <span class="feature">✏️ Digitalización de polígonos en campo</span>
+            <span class="feature">📍 Reportes geolocalizados APS</span>
+            <span class="feature">📶 Soporte offline con sincronización automática</span>
+        </div>
+
+        <h3>Bienvenido</h3>
+        <p>Inicia sesión para acceder al geoportal</p>
+
+        <form id="loginForm">
+            <input type="email" placeholder="Correo electrónico" required>
+            <input type="password" placeholder="Contraseña" required>
+            <button type="submit">Ingresar al geoportal →</button>
+        </form>
+
+        <div class="divider">o continúa como</div>
+
+        <button class="secondary">Acceso de visitante (solo lectura)</button>
+
+        <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+
+        <h3>Registrarse</h3>
+        <form id="registerForm">
+            <input type="email" placeholder="Correo electrónico" required>
+            <input type="password" placeholder="Contraseña" required>
+            <input type="password" placeholder="Confirmar contraseña" required>
+            <button type="submit">Crear cuenta →</button>
+        </form>
+
+        <div class="footer">
+            Geoportal APS v2.0 · Corporación Biocomercio Sostenible<br>
+            Datos protegidos bajo estándares IGAC Colombia
+        </div>
+    </div>
+    <script>
+        // Simulación de navegación
+        document.getElementById('loginForm').addEventListener('submit', (e) => { e.preventDefault(); window.location.href = 'app.html'; });
+        document.getElementById('registerForm').addEventListener('submit', (e) => { e.preventDefault(); window.location.href = 'app.html'; });
+    </script>
+</body>
+</html>
