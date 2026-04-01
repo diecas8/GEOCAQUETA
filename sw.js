@@ -6,8 +6,8 @@
                Cola offline para envíos de campo.
 ═══════════════════════════════════════════════════════════════ */
 
-const CACHE_NAME   = 'geoportal-aps-v3';
-const CACHE_STATIC = 'geoportal-static-v3';
+const CACHE_NAME   = 'geoportal-aps-v4';
+const CACHE_STATIC = 'geoportal-static-v4';
 const CACHE_TILES  = 'geoportal-tiles-v1';
 
 /* Assets que se cachean al instalar */
@@ -15,7 +15,7 @@ const STATIC_ASSETS = [
   './index.html',
   './app.html',
   './reporte.html',
-  './manifest.json',
+  './campo.html',
   /* CDN críticos — se cachean en primera visita */
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
