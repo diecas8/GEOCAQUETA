@@ -281,6 +281,7 @@
     </div>
     <div class="hdr-btns">
       <div class="conn-dot" id="connDot"></div>
+      <button class="hdr-btn" onclick="abrirDiag()" title="Diagnóstico" style="font-size:14px">🔍</button>
       <button class="hdr-btn" onclick="doLogout()" title="Salir">⏻</button>
     </div>
   </header>
@@ -329,6 +330,21 @@
 
 <!-- TOAST -->
 <div id="toast"></div>
+
+<!-- PANEL DIAGNÓSTICO — ver errores en pantalla sin consola -->
+<div id="diagPanel" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(15,20,40,0.97);color:#fff;font-family:monospace;font-size:12px;padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <b style="font-size:15px">🔍 Diagnóstico</b>
+    <button onclick="document.getElementById('diagPanel').style.display='none'" style="background:rgba(255,255,255,0.15);border:none;color:#fff;padding:6px 14px;border-radius:8px;font-size:13px;cursor:pointer">✕ Cerrar</button>
+  </div>
+  <div id="diagLog" style="line-height:1.8"></div>
+  <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+    <button onclick="diagTestSupabase()" style="background:#1565c0;border:none;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;touch-action:manipulation">🔌 Probar Supabase</button>
+    <button onclick="diagTestSync()" style="background:#10b981;border:none;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;touch-action:manipulation">🔄 Probar Sync</button>
+    <button onclick="diagVerCola()" style="background:#f59e0b;border:none;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;touch-action:manipulation">📋 Ver Cola</button>
+    <button onclick="diagLimpiarCola()" style="background:#ef4444;border:none;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;touch-action:manipulation">🗑️ Limpiar Cola</button>
+  </div>
+</div>
 
 <!-- DRAW INFO -->
 <div class="draw-info" id="drawInfo">✏️ Toca el mapa para dibujar · Doble toque para cerrar</div>
@@ -561,42 +577,20 @@ function saveQ() {
 }
 
 async function sincronizar() {
-  if (!navigator.onLine) { toast('📶 Sin conexión a internet'); return; }
-  if (!q.length) { toast('✅ Todo sincronizado'); return; }
+  if (!navigator.onLine || !q.length) { toast('📶 Sin conexión o cola vacía'); return; }
   toast('🔄 Sincronizando ' + q.length + ' registro(s)...', true);
   const ok = [], fail = [];
-  const ERRORES_PERMANENTES = ['42703','23502','23505','22P02','42P01'];
-
   for (let i = 0; i < q.length; i++) {
     try {
       const { error } = await sb.from(q[i].table).insert([q[i].data]);
-      if (!error) {
-        ok.push(i);
-      } else {
-        console.error('[sync] tabla=' + q[i].table, error.code, error.message);
-        const esPermanente = ERRORES_PERMANENTES.some(c =>
-          (error.code||'').startsWith(c) ||
-          (error.message||'').includes('column') ||
-          (error.message||'').includes('does not exist')
-        );
-        if (esPermanente) {
-          // Error de BD — descartar para no bloquear la cola
-          ok.push(i);
-          toast('⚠️ Registro descartado: ' + (error.message||error.code));
-        } else {
-          fail.push(i);
-        }
-      }
-    } catch(e) {
-      console.error('[sync] excepción:', e);
-      // Error de red — mantener en cola
-    }
+      if (!error) ok.push(i);
+      else { console.error(error); fail.push(i); }
+    } catch(e) { console.error(e); }
   }
   q = q.filter((_,i) => !ok.includes(i));
   saveQ();
-  if (ok.length)   { toast('✅ ' + ok.length + ' registro(s) enviado(s)'); cargarCapas(); }
-  if (fail.length) { toast('⚠️ ' + fail.length + ' pendiente(s) — reintentando luego'); }
-  if (!ok.length && !fail.length) toast('✅ Cola procesada');
+  if (ok.length) { toast('✅ ' + ok.length + ' registro(s) sincronizado(s)'); cargarCapas(); }
+  else if (fail.length) toast('⚠️ Error al sincronizar — revisa conexión');
 }
 
 async function qSave(table, data) {
@@ -678,35 +672,34 @@ function initMap() {
 async function cargarCapas() {
   if (!navigator.onLine) return;
   try {
-    const [rP, rU, rPt, rLn, rPg] = await Promise.all([
+    const [rP, rU] = await Promise.all([
       sb.from('predios').select('*'),
-      sb.from('usos_suelo').select('*'),
-      sb.from('sbn_puntual').select('*').catch(() => ({ data:[] })),
-      sb.from('sbn_lineal').select('*').catch(() => ({ data:[] })),
-      sb.from('sbn_poligonal').select('*').catch(() => ({ data:[] }))
+      sb.from('usos_suelo').select('*')
     ]);
     drawn.clearLayers();
     geoMarkers = [];
 
-    // ── Predios ──
+    // Predios
     (rP.data || []).forEach(row => {
       let g = row.geom;
       if (!g) return;
       if (typeof g === 'string') try { g = JSON.parse(g); } catch(e) { return; }
       try {
-        L.geoJSON({ type:'Feature', geometry:g, properties:row }, {
+        const layer = L.geoJSON({ type:'Feature', geometry:g, properties:row }, {
           style: { color:'#10b981', weight:2.5, fillOpacity:0.08, fillColor:'#10b981' }
         }).addTo(drawn);
+        // Etiqueta centroide
         try {
           const c = turf.centroid({ type:'Feature', geometry:g });
-          L.marker([c.geometry.coordinates[1], c.geometry.coordinates[0]], {
-            icon: L.divIcon({ className:'', html:'<div style="background:rgba(255,255,255,0.88);border:1px solid #10b981;border-radius:4px;padding:2px 6px;font-size:11px;color:#10b981;font-weight:600;white-space:nowrap">' + (row.predio||'') + '</div>', iconAnchor:[0,0] })
+          const lbl = L.marker([c.geometry.coordinates[1], c.geometry.coordinates[0]], {
+            icon: L.divIcon({ className:'', html:'<div style="background:rgba(255,255,255,0.85);border:1px solid #10b981;border-radius:4px;padding:2px 6px;font-size:11px;color:#10b981;font-weight:600;white-space:nowrap">' + (row.predio||'') + '</div>', iconAnchor:[0,0] })
           }).addTo(drawn);
+          geoMarkers.push(lbl);
         } catch(e) {}
       } catch(e) {}
     });
 
-    // ── Usos de suelo ──
+    // Usos de suelo
     (rU.data || []).forEach(row => {
       let g = row.geom;
       if (!g) return;
@@ -718,43 +711,6 @@ async function cargarCapas() {
         }).addTo(drawn);
       } catch(e) {}
     });
-
-    // ── APS Puntual ──
-    (rPt.data || []).forEach(row => {
-      if (row.lat == null || row.lng == null) return;
-      try {
-        L.circleMarker([parseFloat(row.lat), parseFloat(row.lng)], {
-          radius:8, fillColor:'#f59e0b', color:'#fff', weight:2, fillOpacity:0.9
-        }).addTo(drawn).bindPopup(
-          '<b>APS Puntual</b><br>' + (row.tipo_sbn||'') + '<br>' + (row.observacion||'')
-        );
-      } catch(e) {}
-    });
-
-    // ── APS Lineal ──
-    (rLn.data || []).forEach(row => {
-      let g = row.geom || row.geom_json;
-      if (!g) return;
-      if (typeof g === 'string') try { g = JSON.parse(g); } catch(e) { return; }
-      try {
-        L.geoJSON({ type:'Feature', geometry:g }, {
-          style: { color:'#3b82f6', weight:3, opacity:0.85 }
-        }).addTo(drawn).bindPopup('<b>APS Lineal</b><br>' + (row.tipo_sbn||''));
-      } catch(e) {}
-    });
-
-    // ── APS Poligonal ──
-    (rPg.data || []).forEach(row => {
-      let g = row.geom || row.geom_json;
-      if (!g) return;
-      if (typeof g === 'string') try { g = JSON.parse(g); } catch(e) { return; }
-      try {
-        L.geoJSON({ type:'Feature', geometry:g }, {
-          style: { color:'#10b981', weight:2, fillOpacity:0.15, fillColor:'#10b981' }
-        }).addTo(drawn).bindPopup('<b>APS Poligonal</b><br>' + (row.tipo_sbn||''));
-      } catch(e) {}
-    });
-
   } catch(e) { console.error('Error cargando capas:', e); }
 }
 
@@ -1218,6 +1174,95 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {});
   });
+}
+
+/* ══════════════════════════════════════
+   DIAGNÓSTICO EN PANTALLA
+══════════════════════════════════════ */
+function diagLog(msg, color) {
+  const el = document.getElementById('diagLog');
+  const d = new Date().toLocaleTimeString('es-CO');
+  el.innerHTML += '<div style="color:' + (color||'#aef') + ';margin-bottom:4px">[' + d + '] ' + msg + '</div>';
+  el.scrollTop = el.scrollHeight;
+}
+
+function abrirDiag() {
+  document.getElementById('diagPanel').style.display = 'block';
+  const log = document.getElementById('diagLog');
+  log.innerHTML = '';
+  diagLog('── Información del sistema ──', '#ffd');
+  diagLog('Online: ' + navigator.onLine);
+  diagLog('Cola pendientes: ' + q.length + ' registro(s)');
+  diagLog('URL: ' + location.href, '#aef');
+  diagLog('User Agent: ' + navigator.userAgent.slice(0,80), '#888');
+}
+
+async function diagTestSupabase() {
+  diagLog('── Probando conexión Supabase ──', '#ffd');
+  try {
+    const { data, error } = await sb.from('predios').select('id').limit(1);
+    if (error) {
+      diagLog('❌ Error Supabase: ' + JSON.stringify(error), '#f88');
+    } else {
+      diagLog('✅ Supabase OK — predios accesible', '#8f8');
+    }
+  } catch(e) {
+    diagLog('❌ Excepción: ' + e.message, '#f88');
+  }
+
+  try {
+    const { data, error } = await sb.from('usos_suelo').select('id').limit(1);
+    if (error) diagLog('❌ usos_suelo: ' + JSON.stringify(error), '#f88');
+    else diagLog('✅ usos_suelo OK', '#8f8');
+  } catch(e) { diagLog('❌ usos_suelo excepción: ' + e.message, '#f88'); }
+
+  try {
+    const { data, error } = await sb.from('sbn_puntual').select('id').limit(1);
+    if (error) diagLog('⚠️ sbn_puntual: ' + JSON.stringify(error), '#fa8');
+    else diagLog('✅ sbn_puntual OK', '#8f8');
+  } catch(e) { diagLog('⚠️ sbn_puntual excepción: ' + e.message, '#fa8'); }
+}
+
+async function diagTestSync() {
+  diagLog('── Probando sincronización ──', '#ffd');
+  if (!navigator.onLine) { diagLog('❌ Sin internet', '#f88'); return; }
+  if (!q.length) { diagLog('ℹ️ Cola vacía — nada que sincronizar', '#aaa'); return; }
+  diagLog('Cola tiene ' + q.length + ' item(s)');
+  for (let i = 0; i < q.length; i++) {
+    const item = q[i];
+    diagLog('Item ' + (i+1) + ': tabla=' + item.table, '#aef');
+    diagLog('  data keys: ' + Object.keys(item.data||{}).join(', '), '#888');
+    try {
+      const { error } = await sb.from(item.table).insert([item.data]);
+      if (error) {
+        diagLog('  ❌ Error: code=' + error.code + ' msg=' + error.message, '#f88');
+        if (error.details) diagLog('  details: ' + error.details, '#f88');
+        if (error.hint)    diagLog('  hint: ' + error.hint, '#fa8');
+      } else {
+        diagLog('  ✅ Insertado OK', '#8f8');
+      }
+    } catch(e) {
+      diagLog('  ❌ Excepción: ' + e.message, '#f88');
+    }
+  }
+}
+
+function diagVerCola() {
+  diagLog('── Cola offline ──', '#ffd');
+  if (!q.length) { diagLog('Cola vacía', '#aaa'); return; }
+  q.forEach(function(item, i) {
+    diagLog('Item ' + (i+1) + ': ' + item.table, '#aef');
+    const keys = Object.keys(item.data||{}).filter(k => k !== 'geom' && k !== 'geom_json');
+    keys.forEach(function(k) {
+      diagLog('  ' + k + ': ' + JSON.stringify(item.data[k]), '#ccc');
+    });
+  });
+}
+
+function diagLimpiarCola() {
+  if (!confirm('¿Limpiar los ' + q.length + ' registro(s) de la cola? Se perderán.')) return;
+  q = []; saveQ();
+  diagLog('🗑️ Cola limpiada', '#fa8');
 }
 </script>
 </body>
