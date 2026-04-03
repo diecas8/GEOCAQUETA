@@ -4,11 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>APS Campo</title>
-  <link rel="manifest" href="./manifest.json">
+
+  <!-- ══ PWA — manifest PROPIO de la app de campo ══ -->
+  <link rel="manifest" href="./manifest-campo.json">
+
+  <!-- Android Chrome — instala como "APS Campo" -->
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="application-name" content="APS Campo">
+
+  <!-- iOS Safari — instala como "APS Campo" abriendo campo.html -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="APS Campo">
+
+  <!-- Color de barra de estado -->
   <meta name="theme-color" content="#1565c0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
@@ -16,7 +25,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/togeojson@0.16.0/togeojson.js"></script>
   <style>
     :root {
       --az: #1565c0; --sky: #1e88e5; --ice: #42a5f5;
@@ -192,7 +200,7 @@
       display:flex; align-items:center; justify-content:center;
       cursor:pointer; touch-action:manipulation; z-index:300;
     }
-    #fabGPS { background:var(--card); color:var(--az); }
+    #fabGPS.tracking { background:var(--az); color:#fff; }
 
     /* ── BARRA MUNICIPIOS ── */
     #munBar {
@@ -761,9 +769,7 @@ const CC = {
   'Pasto':'#8B4513','Forestales':'#228B22','Frijol':'#32CD32','Maiz':'#FFD700',
   'Yuca':'#D2B48C','Aguacate':'#7CFC00','Caña':'#9ACD32','Palma de aceite':'#F4A460',
   'Cacao':'#CD853F','Café':'#6F4E37','Frutales':'#FFA07A','Bosque natural':'#2E8B57',
-  'Bosque galeria':'#3CB371','Lago':'#4682B4','Pancoger':'#DEB887',
-  'Plátano':'#FFE135','Conservación':'#1B5E20','Descanso':'#B0BEC5',
-  'Arroz':'#E8D5A3','Otros cultivos':'#CE93D8'
+  'Bosque galeria':'#3CB371','Lago':'#4682B4','Pancoger':'#DEB887'
 };
 
 /* ══════════════════════════════════════
@@ -776,18 +782,11 @@ function saveQ() {
   const n = q.length;
   const badge = document.getElementById('syncBadge');
   document.getElementById('syncNum').textContent = n;
-  if (n) {
-    badge.innerHTML = '⏳ <span id="syncNum">' + n + '</span> pendiente' + (n > 1 ? 's' : '') + ' — toca para sincronizar';
-    badge.style.display = 'block';
-  } else {
-    badge.style.display = 'none';
-  }
+  badge.style.display = n ? 'block' : 'none';
 }
 
 async function sincronizar() {
   if (!navigator.onLine || !q.length) { toast('📶 Sin conexión o cola vacía'); return; }
-  const badge = document.getElementById('syncBadge');
-  badge.textContent = '🔄 Sincronizando…';
   toast('🔄 Sincronizando ' + q.length + ' registro(s)...', true);
   const ok = [], fail = [];
   for (let i = 0; i < q.length; i++) {
@@ -799,7 +798,6 @@ async function sincronizar() {
   }
   q = q.filter((_,i) => !ok.includes(i));
   saveQ();
-  document.getElementById('toast').classList.remove('on');
   if (ok.length) { toast('✅ ' + ok.length + ' registro(s) sincronizado(s)'); cargarCapas(); }
   else if (fail.length) toast('⚠️ Error al sincronizar — revisa conexión');
 }
@@ -821,11 +819,6 @@ window.addEventListener('offline', () => setConn(false));
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && navigator.onLine && q.length) sincronizar();
 });
-
-/* Reintento automático cada 30 s — cubre iOS Safari donde SyncManager no está disponible */
-setInterval(function() {
-  if (navigator.onLine && q.length) sincronizar();
-}, 30000);
 
 function setConn(on) {
   const d = document.getElementById('connDot');
@@ -930,30 +923,38 @@ async function cargarCapas() {
   } catch(e) { console.error('Error cargando capas:', e); }
 }
 
-/* ══ GPS NATIVO — solo ubica posición actual, NO bloquea clics en el mapa ══ */
-var gpsWatchId       = null;   // mantenido por compatibilidad (no se usa para watch)
+/* ══ GPS NATIVO — punto azul pulsante estilo Google Maps ══ */
+var gpsWatchId  = null;
 var gpsMarkerCurrent = null;
-var gpsCircle        = null;
-var gpsTracking      = false;
+var gpsCircle   = null;
+var gpsTracking = false;
 
 function toggleTracking() {
-  /* Solo busca la posición actual una vez y centra el mapa.
-     NO usa watchPosition para no interferir con el dibujo de polígonos. */
-  const fab = document.getElementById('fabGPS');
-  if (!navigator.geolocation) { toast('❌ GPS no disponible'); return; }
+  if (gpsTracking) {
+    // Desactivar tracking
+    if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+    gpsTracking = false;
+    document.getElementById('fabGPS').classList.remove('tracking');
+    toast('GPS desactivado');
+  } else {
+    iniciarGPS();
+  }
+}
 
-  fab.disabled = true;
-  toast('📡 Obteniendo posición GPS…', true);
+function iniciarGPS() {
+  if (!navigator.geolocation) { toast('❌ GPS no disponible en este dispositivo'); return; }
+  gpsTracking = true;
+  document.getElementById('fabGPS').classList.add('tracking');
+  toast('📡 Buscando señal GPS...', true);
 
-  navigator.geolocation.getCurrentPosition(
+  gpsWatchId = navigator.geolocation.watchPosition(
     function(pos) {
       document.getElementById('toast').classList.remove('on');
-      fab.disabled = false;
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
       const acc = pos.coords.accuracy;
 
-      // Crear o actualizar marcador pulsante
+      // Crear o mover el marcador pulsante
       if (!gpsMarkerCurrent) {
         const icon = L.divIcon({
           className: '',
@@ -974,29 +975,30 @@ function toggleTracking() {
         fillOpacity: 0.08, weight: 1, opacity: 0.3
       }).addTo(map);
 
-      // Centrar mapa en la posición
+      // Centrar mapa en la posición (solo la primera vez o si tracking activo)
       map.panTo([lat, lng]);
-      toast('📍 Posición: ' + lat.toFixed(5) + ', ' + lng.toFixed(5) + ' · ±' + Math.round(acc) + 'm');
     },
     function(err) {
-      fab.disabled = false;
+      gpsTracking = false;
+      document.getElementById('fabGPS').classList.remove('tracking');
+      if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
       document.getElementById('toast').classList.remove('on');
       toast('❌ GPS: ' + err.message);
     },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
   );
 }
 
-/* Mantener por compatibilidad con irAMiPosicion */
-function irAMiPosicion() { toggleTracking(); }
-
-/* Navegar a municipio en el mapa */
+/* Navegar a municipio */
 function irMunicipio(id, lat, lng, zoom) {
   document.querySelectorAll('.mun-chip').forEach(c => c.classList.remove('act'));
   event.target.classList.add('act');
   map.flyTo([lat, lng], zoom, { duration: 1.4 });
   setTimeout(() => event.target.classList.remove('act'), 2000);
 }
+
+/* Mantener por compatibilidad */
+function irAMiPosicion() { toggleTracking(); }
 
 /* ══════════════════════════════════════
    NAVEGACIÓN
