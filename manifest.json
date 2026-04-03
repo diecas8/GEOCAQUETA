@@ -1,0 +1,21 @@
+{
+  "name": "Geoportal APS — Biocomercio Sostenible",
+  "short_name": "Geoportal APS",
+  "description": "Plataforma geoespacial para gestión de predios y usos de suelo en campo",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f0f4f8",
+  "theme_color": "#1565c0",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='32' fill='%231565c0'/><text y='130' x='30' font-size='120' font-family='serif'>🌿</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "prefer_related_applications": false
+}
