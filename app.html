@@ -256,6 +256,34 @@
     .panel-card::-webkit-scrollbar { width:3px; }
     .panel-card::-webkit-scrollbar-thumb { background:rgba(21,101,192,0.2); border-radius:3px; }
 
+    /* ── KML UPLOAD ── */
+    .kml-drop {
+      border:2px dashed rgba(124,58,237,0.4); border-radius:14px;
+      padding:24px 16px; text-align:center; margin-bottom:14px;
+      background:rgba(124,58,237,0.04); cursor:pointer;
+      touch-action:manipulation; transition:all .2s;
+    }
+    .kml-drop:active { background:rgba(124,58,237,0.1); }
+    .kml-drop .kd-ico { font-size:36px; margin-bottom:8px; }
+    .kml-drop .kd-txt { font-size:14px; color:rgba(26,42,69,0.6); }
+    .kml-drop .kd-sub { font-size:12px; color:rgba(26,42,69,0.35); margin-top:4px; }
+    .kml-preview {
+      background:rgba(124,58,237,0.06); border:1px solid rgba(124,58,237,0.2);
+      border-radius:10px; padding:10px 14px; margin-bottom:14px; display:none;
+    }
+    .kml-preview .kp-name { font-size:13px; font-weight:600; color:rgba(26,42,69,0.8); }
+    .kml-preview .kp-info { font-size:12px; color:rgba(26,42,69,0.45); margin-top:3px; }
+    .tipo-grid-kml { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:16px; }
+    .tipo-btn-kml {
+      padding:14px 10px; border-radius:12px; border:2px solid var(--border);
+      background:rgba(21,101,192,0.03); cursor:pointer; touch-action:manipulation;
+      text-align:center; transition:all .2s;
+    }
+    .tipo-btn-kml .ti { font-size:22px; display:block; margin-bottom:4px; }
+    .tipo-btn-kml .tl { font-size:12px; color:rgba(26,42,69,0.6); font-weight:500; }
+    .tipo-btn-kml.sel { border-color:rgba(124,58,237,0.6); background:rgba(124,58,237,0.1); }
+    .tipo-btn-kml.sel .tl { color:#7c3aed; }
+
     /* ── CÁMARA Y FOTOS ── */
     .foto-area {
       border:2px dashed rgba(21,101,192,0.25); border-radius:14px;
@@ -383,6 +411,9 @@
     <button class="nav-btn" id="nav-reporte" onclick="irA('reporte')">
       <span class="ni">📋</span><span>Reporte</span>
     </button>
+    <button class="nav-btn" id="nav-kml" onclick="irA('kml')">
+      <span class="ni">📂</span><span>KML</span>
+    </button>
   </nav>
 </div>
 
@@ -419,26 +450,14 @@
     </div>
     <div class="panel-body">
 
-      <!-- PASO 1: Dibujar o subir KML -->
+      <!-- PASO 1: Dibujar -->
       <div id="predio-paso1">
         <div class="steps"><div class="step act"></div><div class="step"></div></div>
         <p style="font-size:14px;color:rgba(26,42,69,0.6);margin-bottom:16px;line-height:1.6">
-          Dibuja el límite del predio en el mapa, o sube un archivo <strong>KML</strong> de Google Earth.
+          Toca <strong>Comenzar a dibujar</strong> y luego toca cada esquina del predio en el mapa. Cuando termines, toca dos veces el último punto para cerrar.
         </p>
-        <button class="btn btn-pri" onclick="iniciarDibujoPredio()">✏️ Dibujar en el mapa</button>
-        <div style="display:flex;align-items:center;gap:10px;margin:10px 0">
-          <div style="flex:1;height:1px;background:rgba(21,101,192,0.1)"></div>
-          <span style="font-size:12px;color:rgba(26,42,69,0.35)">o</span>
-          <div style="flex:1;height:1px;background:rgba(21,101,192,0.1)"></div>
-        </div>
-        <button class="btn btn-sec" onclick="document.getElementById('kml-predio-input').click()" style="border-color:rgba(21,101,192,0.3)">
-          📂 Subir archivo KML / KMZ
-        </button>
-        <input type="file" id="kml-predio-input" accept=".kml,.kmz" style="display:none" onchange="cargarKML(event,'predio')">
-        <p style="font-size:11px;color:rgba(26,42,69,0.35);margin-top:8px;line-height:1.5">
-          Archivos exportados desde Google Earth o Google Maps
-        </p>
-        <button class="btn btn-sec" onclick="cerrarPanel('panelPredio')" style="margin-top:4px">Cancelar</button>
+        <button class="btn btn-pri" onclick="iniciarDibujoPredio()">✏️ Comenzar a dibujar</button>
+        <button class="btn btn-sec" onclick="cerrarPanel('panelPredio')">Cancelar</button>
       </div>
 
       <!-- PASO 2: Formulario -->
@@ -500,27 +519,18 @@
         <button class="btn btn-sec" onclick="cerrarPanel('panelUso')">Cancelar</button>
       </div>
 
-      <!-- PASO 2: Dibujar o subir KML -->
+      <!-- PASO 2: Dibujar -->
       <div id="uso-paso2" style="display:none">
         <div class="steps"><div class="step"></div><div class="step act"></div><div class="step"></div></div>
         <div class="gps-chip">
           <span class="gi">🏞️</span>
           <div class="gc" id="uso-predio-nombre">Predio seleccionado</div>
         </div>
-        <p style="font-size:14px;color:rgba(26,42,69,0.6);margin-bottom:12px;line-height:1.6">
-          Dibuja el área del cultivo o sube un KML.
+        <p style="font-size:14px;color:rgba(26,42,69,0.6);margin-bottom:16px;line-height:1.6">
+          Ahora dibuja el área del cultivo dentro del predio.
         </p>
         <button class="btn btn-pri" onclick="iniciarDibujoUso()">✏️ Dibujar área del cultivo</button>
-        <div style="display:flex;align-items:center;gap:10px;margin:10px 0">
-          <div style="flex:1;height:1px;background:rgba(21,101,192,0.1)"></div>
-          <span style="font-size:12px;color:rgba(26,42,69,0.35)">o</span>
-          <div style="flex:1;height:1px;background:rgba(21,101,192,0.1)"></div>
-        </div>
-        <button class="btn btn-sec" onclick="document.getElementById('kml-uso-input').click()" style="border-color:rgba(21,101,192,0.3)">
-          📂 Subir archivo KML / KMZ
-        </button>
-        <input type="file" id="kml-uso-input" accept=".kml,.kmz" style="display:none" onchange="cargarKML(event,'uso')">
-        <button class="btn btn-sec" onclick="mostrarPaso('uso',1)" style="margin-top:4px">← Cambiar predio</button>
+        <button class="btn btn-sec" onclick="mostrarPaso('uso',1)">← Cambiar predio</button>
       </div>
 
       <!-- PASO 3: Formulario -->
@@ -642,6 +652,79 @@
       </button>
       <button class="btn btn-sec" onclick="activarModoReporte()">📍 Seleccionar ubicación en mapa</button>
       <button class="btn btn-sec" onclick="cerrarPanel('panelReporte')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════
+     PANEL: CARGAR KML
+════════════════════════════════════ -->
+<div class="panel" id="panelKML">
+  <div class="panel-card">
+    <div class="panel-handle"></div>
+    <div class="panel-hdr">
+      <div class="panel-title">📂 Cargar archivo KML</div>
+      <button class="panel-close" onclick="cerrarPanel('panelKML')">✕</button>
+    </div>
+    <div class="panel-body">
+
+      <!-- PASO 1: Seleccionar archivo -->
+      <div id="kml-paso1">
+        <div class="steps"><div class="step act"></div><div class="step"></div><div class="step"></div></div>
+        <p style="font-size:14px;color:rgba(26,42,69,0.55);margin-bottom:14px;line-height:1.6">
+          Sube un archivo <strong>.kml</strong> o <strong>.kmz</strong> de Google Earth para ver el polígono en el mapa y guardarlo.
+        </p>
+        <div class="kml-drop" onclick="document.getElementById('kml-file-input').click()">
+          <div class="kd-ico">📂</div>
+          <div class="kd-txt">Toca para seleccionar archivo</div>
+          <div class="kd-sub">.kml o .kmz desde Google Earth</div>
+        </div>
+        <input type="file" id="kml-file-input" accept=".kml,.kmz" style="display:none" onchange="onKMLSeleccionado(event)">
+        <button class="btn btn-sec" onclick="cerrarPanel('panelKML')">Cancelar</button>
+      </div>
+
+      <!-- PASO 2: Vista previa y tipo -->
+      <div id="kml-paso2" style="display:none">
+        <div class="steps"><div class="step"></div><div class="step act"></div><div class="step"></div></div>
+        <div class="kml-preview" id="kml-preview-info">
+          <div class="kp-name" id="kml-archivo-nombre">archivo.kml</div>
+          <div class="kp-info" id="kml-archivo-info">Cargando...</div>
+        </div>
+        <p style="font-size:14px;color:rgba(26,42,69,0.6);margin-bottom:12px;font-weight:600">
+          ¿A qué capa quieres agregar este polígono?
+        </p>
+        <div class="tipo-grid-kml">
+          <button class="tipo-btn-kml" data-kml-tipo="predio" onclick="selKMLTipo(this)">
+            <span class="ti">🏞️</span><span class="tl">Predio</span>
+          </button>
+          <button class="tipo-btn-kml" data-kml-tipo="uso" onclick="selKMLTipo(this)">
+            <span class="ti">🌾</span><span class="tl">Uso de suelo</span>
+          </button>
+          <button class="tipo-btn-kml" data-kml-tipo="aps_puntual" onclick="selKMLTipo(this)">
+            <span class="ti">📍</span><span class="tl">APS Puntual</span>
+          </button>
+          <button class="tipo-btn-kml" data-kml-tipo="aps_poligonal" onclick="selKMLTipo(this)">
+            <span class="ti">⬡</span><span class="tl">APS Poligonal</span>
+          </button>
+        </div>
+        <button class="btn btn-pri" id="btn-kml-siguiente" onclick="kmlSiguiente()" disabled>
+          Siguiente →
+        </button>
+        <button class="btn btn-sec" onclick="mostrarPaso('kml',1)">← Cargar otro archivo</button>
+      </div>
+
+      <!-- PASO 3: Formulario según tipo -->
+      <div id="kml-paso3" style="display:none">
+        <div class="steps"><div class="step"></div><div class="step"></div><div class="step act"></div></div>
+        <div class="kml-preview" id="kml-preview-info2" style="display:block">
+          <div class="kp-name" id="kml-archivo-nombre2"></div>
+          <div class="kp-info" id="kml-area-info"></div>
+        </div>
+        <div id="kml-form-container"></div>
+        <button class="btn btn-pri" onclick="guardarKML()">💾 Guardar en mapa</button>
+        <button class="btn btn-sec" onclick="mostrarPaso('kml',2)">← Cambiar tipo</button>
+      </div>
+
     </div>
   </div>
 </div>
@@ -920,6 +1003,7 @@ function irA(tab) {
   if (tab === 'gps')     abrirPanelGPS();
   if (tab === 'reporte') abrirPanel('panelReporte');
   if (tab === 'mapa')    abrirPanel('panelVerPredios');
+  if (tab === 'kml')     abrirPanelKML();
 }
 
 /* ══════════════════════════════════════
@@ -1370,91 +1454,316 @@ async function irAPredio(id) {
   } catch(e) { toast('❌ Error al ir al predio'); }
 }
 
-
 /* ══════════════════════════════════════
-   KML / KMZ — cargar y convertir a polígono
+   KML — Cargar y procesar archivos KML/KMZ
 ══════════════════════════════════════ */
-function cargarKML(event, destino) {
+var kmlGeomPendiente = null;   // geometría extraída del KML
+var kmlTipoSel = null;         // tipo de capa seleccionado
+var kmlLayerPreview = null;    // capa temporal de previsualización
+
+function abrirPanelKML() {
+  kmlGeomPendiente = null; kmlTipoSel = null;
+  if (kmlLayerPreview) { try { map.removeLayer(kmlLayerPreview); } catch(e){} kmlLayerPreview = null; }
+  document.getElementById('kml-file-input').value = '';
+  document.querySelectorAll('.tipo-btn-kml').forEach(b => b.classList.remove('sel'));
+  document.getElementById('btn-kml-siguiente').disabled = true;
+  mostrarPaso('kml', 1);
+  abrirPanel('panelKML');
+}
+
+function onKMLSeleccionado(event) {
   const file = event.target.files[0];
   if (!file) return;
-  event.target.value = '';
   toast('📂 Leyendo archivo...', true);
 
   const reader = new FileReader();
   reader.onload = function(e) {
     try {
-      const kmlText = e.target.result;
+      let kmlText = e.target.result;
+
+      // Si es KMZ (zip), avisamos que no soportamos aún
+      if (file.name.toLowerCase().endsWith('.kmz')) {
+        toast('⚠️ KMZ no soportado aún — extrae el .kml dentro del .kmz con Google Earth');
+        return;
+      }
+
+      // Parsear KML
       const parser = new DOMParser();
       const kmlDoc = parser.parseFromString(kmlText, 'text/xml');
 
-      // Buscar coordenadas de polígono
-      let coordText = '';
-      const nodes = kmlDoc.querySelectorAll('outerBoundaryIs coordinates, Polygon coordinates, coordinates');
-      for (let node of nodes) {
-        const txt = node.textContent.trim();
-        if (txt.includes(',')) { coordText = txt; break; }
-      }
+      // Extraer polígonos y puntos del KML
+      const features = [];
+      const placemarks = kmlDoc.querySelectorAll('Placemark');
 
-      if (!coordText) {
-        document.getElementById('toast').classList.remove('on');
-        toast('❌ No se encontraron polígonos en el KML');
-        return;
-      }
+      placemarks.forEach(function(pm) {
+        const nombre = pm.querySelector('name') ? pm.querySelector('name').textContent.trim() : '';
+        const desc   = pm.querySelector('description') ? pm.querySelector('description').textContent.trim() : '';
 
-      // KML usa lng,lat,alt separados por espacios
-      const puntos = coordText.trim().split(/[\s
-]+/).map(function(p) {
-        const parts = p.split(',');
-        return [parseFloat(parts[0]), parseFloat(parts[1])];
-      }).filter(function(p) { return !isNaN(p[0]) && !isNaN(p[1]); });
+        // Polígono
+        const polygon = pm.querySelector('Polygon');
+        if (polygon) {
+          const coordsEl = polygon.querySelector('outerBoundaryIs coordinates') ||
+                           polygon.querySelector('coordinates');
+          if (coordsEl) {
+            const coords = parseKMLCoords(coordsEl.textContent.trim());
+            if (coords.length >= 3) {
+              features.push({
+                type: 'Feature',
+                geometry: { type: 'Polygon', coordinates: [coords] },
+                properties: { nombre, desc }
+              });
+            }
+          }
+        }
 
-      if (puntos.length < 3) {
-        document.getElementById('toast').classList.remove('on');
-        toast('❌ KML sin suficientes puntos');
-        return;
-      }
+        // Punto
+        const point = pm.querySelector('Point coordinates');
+        if (point && !polygon) {
+          const parts = point.textContent.trim().split(',');
+          if (parts.length >= 2) {
+            features.push({
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: [parseFloat(parts[0]), parseFloat(parts[1])] },
+              properties: { nombre, desc }
+            });
+          }
+        }
 
-      // Cerrar polígono
-      if (puntos[0][0] !== puntos[puntos.length-1][0]) puntos.push(puntos[0]);
-
-      const geojson = { type:'Feature', geometry:{ type:'Polygon', coordinates:[puntos] }, properties:{} };
-      const area = Math.round((turf.area(geojson) / 10000) * 100) / 100;
-
-      const layer = L.geoJSON(geojson, {
-        style: { color:'#1565c0', weight:2.5, fillOpacity:0.1 }
+        // MultiGeometry / LineString
+        const line = pm.querySelector('LineString coordinates');
+        if (line && !polygon) {
+          const coords = parseKMLCoords(line.textContent.trim());
+          if (coords.length >= 2) {
+            features.push({
+              type: 'Feature',
+              geometry: { type: 'LineString', coordinates: coords },
+              properties: { nombre, desc }
+            });
+          }
+        }
       });
-      map.fitBounds(layer.getBounds(), { padding:[40,40], maxZoom:17 });
 
-      document.getElementById('toast').classList.remove('on');
-
-      if (destino === 'predio') {
-        prediosPendiente = layer.getLayers()[0];
-        drawn.addLayer(prediosPendiente);
-        document.getElementById('predio-area-val').textContent = area;
-        mostrarPaso('predio', 2);
-        abrirPanel('panelPredio');
-        toast('✅ KML cargado · ' + area + ' ha');
-      } else {
-        usoPendiente = layer.getLayers()[0];
-        drawn.addLayer(usoPendiente);
-        document.getElementById('uso-area-val').textContent = area;
-        const grid = document.getElementById('cult-grid');
-        grid.innerHTML = Object.entries(CC).map(function(e2) {
-          return '<div class="cult-btn" onclick="selCultivo(this,\'' + e2[0] + '\')">' +
-            '<div class="dot" style="background:' + e2[1] + '"></div>' +
-            '<div class="lbl">' + e2[0] + '</div></div>';
-        }).join('');
-        mostrarPaso('uso', 3);
-        abrirPanel('panelUso');
-        toast('✅ KML cargado · ' + area + ' ha · Selecciona cultivo');
+      if (!features.length) {
+        toast('❌ No se encontraron geometrías en el archivo KML');
+        return;
       }
-    } catch(err) {
+
+      // Guardar la primera geometría (o crear colección)
+      kmlGeomPendiente = features.length === 1
+        ? features[0]
+        : { type: 'FeatureCollection', features: features };
+
+      // Mostrar previsualización en el mapa
+      if (kmlLayerPreview) { try { map.removeLayer(kmlLayerPreview); } catch(e){} }
+      kmlLayerPreview = L.geoJSON(kmlGeomPendiente, {
+        style: { color:'#7c3aed', weight:2.5, fillOpacity:0.15, fillColor:'#7c3aed' },
+        pointToLayer: function(f, ll) {
+          return L.circleMarker(ll, { radius:8, fillColor:'#7c3aed', color:'#fff', weight:2, fillOpacity:0.9 });
+        }
+      }).addTo(map);
+
+      try { map.fitBounds(kmlLayerPreview.getBounds(), { padding:[30,30], maxZoom:17 }); } catch(e) {}
+
+      // Actualizar info
+      const nombre_archivo = file.name;
+      const n_features = features.length;
+      const tipos = [...new Set(features.map(f => f.geometry.type))].join(', ');
+      document.getElementById('kml-archivo-nombre').textContent = nombre_archivo;
+      document.getElementById('kml-archivo-info').textContent = n_features + ' geometría(s) · ' + tipos;
+      document.getElementById('kml-preview-info').style.display = 'block';
+
       document.getElementById('toast').classList.remove('on');
-      toast('❌ Error KML: ' + err.message);
+      toast('✅ KML cargado — ' + n_features + ' geometría(s)');
+      mostrarPaso('kml', 2);
+      cerrarPanel('panelKML');
+      setTimeout(function() { abrirPanel('panelKML'); }, 100);
+
+    } catch(err) {
+      console.error('Error KML:', err);
+      toast('❌ Error al leer el KML: ' + err.message);
     }
   };
-  reader.onerror = function() { toast('❌ No se pudo leer el archivo'); };
   reader.readAsText(file);
+}
+
+function parseKMLCoords(text) {
+  return text.trim().split(/\s+/).map(function(c) {
+    const p = c.split(',');
+    return [parseFloat(p[0]), parseFloat(p[1])];
+  }).filter(function(c) { return !isNaN(c[0]) && !isNaN(c[1]); });
+}
+
+function selKMLTipo(el) {
+  document.querySelectorAll('.tipo-btn-kml').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel');
+  kmlTipoSel = el.dataset.kmlTipo;
+  document.getElementById('btn-kml-siguiente').disabled = false;
+}
+
+function kmlSiguiente() {
+  if (!kmlTipoSel) { toast('⚠️ Selecciona el tipo de capa'); return; }
+  if (!kmlGeomPendiente) { toast('⚠️ Primero carga un archivo KML'); return; }
+
+  // Calcular área si es polígono
+  let areaInfo = '';
+  try {
+    const geom = kmlGeomPendiente.type === 'FeatureCollection'
+      ? kmlGeomPendiente : kmlGeomPendiente;
+    const area = turf.area(geom);
+    if (area > 0) areaInfo = (area / 10000).toFixed(2) + ' ha calculadas';
+  } catch(e) {}
+
+  document.getElementById('kml-archivo-nombre2').textContent =
+    document.getElementById('kml-archivo-nombre').textContent;
+  document.getElementById('kml-area-info').textContent = areaInfo || 'Geometría cargada';
+
+  // Generar formulario según tipo
+  const form = document.getElementById('kml-form-container');
+  if (kmlTipoSel === 'predio') {
+    form.innerHTML =
+      '<div class="fg"><label class="fl">Nombre del predio *</label>' +
+      '<input type="text" id="kf_nombre" class="fi" placeholder="Ej: La Esperanza" autocomplete="off"></div>' +
+      '<div class="fg"><label class="fl">Municipio *</label>' +
+      '<select id="kf_municipio" class="fs">' +
+      '<option value="">Seleccione municipio</option>' +
+      '<option value="Solano">Solano</option>' +
+      '<option value="Cartagena del Chairá">Cartagena del Chairá</option>' +
+      '<option value="La Montañita">La Montañita</option>' +
+      '<option value="Puerto Rico">Puerto Rico</option>' +
+      '</select></div>' +
+      '<div class="fg"><label class="fl">Vereda</label>' +
+      '<input type="text" id="kf_vereda" class="fi" placeholder="Vereda" autocomplete="off"></div>' +
+      '<div class="fg"><label class="fl">Propietario</label>' +
+      '<input type="text" id="kf_propietario" class="fi" placeholder="Nombre completo" autocomplete="off"></div>';
+
+  } else if (kmlTipoSel === 'uso') {
+    const cultOpts = Object.keys(CC).map(c =>
+      '<option value="' + c + '">' + c + '</option>'
+    ).join('');
+    form.innerHTML =
+      '<div class="fg"><label class="fl">Tipo de cultivo *</label>' +
+      '<select id="kf_cultivo" class="fs"><option value="">Seleccione cultivo</option>' + cultOpts + '</select></div>' +
+      '<div class="fg"><label class="fl">Predio asociado (opcional)</label>' +
+      '<select id="kf_predio" class="fs"><option value="">Sin asociar</option></select></div>';
+    // Cargar predios
+    if (navigator.onLine) {
+      sb.from('predios').select('id,predio').then(function(r) {
+        const sel = document.getElementById('kf_predio');
+        if (sel && r.data) {
+          r.data.forEach(function(p) {
+            const o = document.createElement('option');
+            o.value = p.id; o.textContent = p.predio || 'Predio ' + p.id;
+            sel.appendChild(o);
+          });
+        }
+      });
+    }
+
+  } else if (kmlTipoSel === 'aps_puntual') {
+    form.innerHTML =
+      '<div class="fg"><label class="fl">Tipo de APS *</label>' +
+      '<select id="kf_tipo_aps" class="fs">' +
+      '<option value="">Seleccione tipo</option>' +
+      '<option>Restauración ecológica</option><option>Corredor biológico</option>' +
+      '<option>Agroforestería</option><option>Silvopastoril</option>' +
+      '<option>Fuente hídrica</option><option>Revegetalización</option><option>Otro</option>' +
+      '</select></div>' +
+      '<div class="fg"><label class="fl">Observación</label>' +
+      '<textarea id="kf_obs" class="fta" placeholder="Descripción..."></textarea></div>';
+
+  } else if (kmlTipoSel === 'aps_poligonal') {
+    form.innerHTML =
+      '<div class="fg"><label class="fl">Tipo de APS *</label>' +
+      '<select id="kf_tipo_aps" class="fs">' +
+      '<option value="">Seleccione tipo</option>' +
+      '<option>Restauración activa</option><option>Restauración pasiva</option>' +
+      '<option>Agroforestería</option><option>Silvopastoril</option>' +
+      '<option>Plantación forestal</option><option>Humedal protegido</option>' +
+      '<option>Bosque regeneración</option><option>Otro</option>' +
+      '</select></div>' +
+      '<div class="fg"><label class="fl">Observación</label>' +
+      '<textarea id="kf_obs" class="fta" placeholder="Descripción..."></textarea></div>';
+  }
+
+  mostrarPaso('kml', 3);
+}
+
+async function guardarKML() {
+  if (!kmlGeomPendiente || !kmlTipoSel) { toast('⚠️ Faltan datos'); return; }
+
+  // Extraer geometría limpia
+  let geomFinal;
+  if (kmlGeomPendiente.type === 'FeatureCollection') {
+    const polys = kmlGeomPendiente.features.filter(f => f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon');
+    if (polys.length) {
+      geomFinal = polys[0].geometry;
+    } else {
+      geomFinal = kmlGeomPendiente.features[0].geometry;
+    }
+  } else {
+    geomFinal = kmlGeomPendiente.geometry || kmlGeomPendiente;
+  }
+
+  // Convertir a MultiPolygon si es Polygon
+  if (geomFinal.type === 'Polygon') {
+    geomFinal = { type:'MultiPolygon', coordinates:[geomFinal.coordinates] };
+  }
+
+  let ok = false;
+
+  if (kmlTipoSel === 'predio') {
+    const nombre = (document.getElementById('kf_nombre')?.value || '').trim();
+    const mun    = document.getElementById('kf_municipio')?.value || '';
+    if (!nombre || !mun) { toast('⚠️ Nombre y municipio son obligatorios'); return; }
+    let has = 0;
+    try { has = Math.round((turf.area({ type:'Feature', geometry:geomFinal }) / 10000) * 100) / 100; } catch(e) {}
+    ok = await qSave('predios', {
+      predio: nombre, municipio: mun,
+      vereda: document.getElementById('kf_vereda')?.value || null,
+      propietari: document.getElementById('kf_propietario')?.value || null,
+      has, geom: geomFinal
+    });
+
+  } else if (kmlTipoSel === 'uso') {
+    const cultivo = document.getElementById('kf_cultivo')?.value || '';
+    if (!cultivo) { toast('⚠️ Selecciona el tipo de cultivo'); return; }
+    let has = 0;
+    try { has = Math.round((turf.area({ type:'Feature', geometry:geomFinal }) / 10000) * 100) / 100; } catch(e) {}
+    const idPredio = document.getElementById('kf_predio')?.value ? parseInt(document.getElementById('kf_predio').value) : null;
+    ok = await qSave('usos_suelo', { cultivo, has, geom: geomFinal, id_predio: idPredio });
+
+  } else if (kmlTipoSel === 'aps_puntual') {
+    const tipo = document.getElementById('kf_tipo_aps')?.value || '';
+    if (!tipo) { toast('⚠️ Selecciona el tipo de APS'); return; }
+    // Para puntual usar centroide si es polígono
+    let lat, lng;
+    try {
+      const c = turf.centroid({ type:'Feature', geometry:geomFinal });
+      lat = c.geometry.coordinates[1]; lng = c.geometry.coordinates[0];
+    } catch(e) { toast('❌ No se pudo calcular el centroide'); return; }
+    ok = await qSave('sbn_puntual', { tipo_sbn: tipo, lat, lng, observacion: document.getElementById('kf_obs')?.value || null });
+
+  } else if (kmlTipoSel === 'aps_poligonal') {
+    const tipo = document.getElementById('kf_tipo_aps')?.value || '';
+    if (!tipo) { toast('⚠️ Selecciona el tipo de APS'); return; }
+    let area_has = 0;
+    try { area_has = Math.round((turf.area({ type:'Feature', geometry:geomFinal }) / 10000) * 10000) / 10000; } catch(e) {}
+    ok = await qSave('sbn_poligonal', { tipo_sbn: tipo, geom_json: geomFinal, area_has, observacion: document.getElementById('kf_obs')?.value || null });
+  }
+
+  // Mantener la capa en el mapa y actualizar color según tipo
+  if (kmlLayerPreview) {
+    const colores = { predio:'#10b981', uso:'#f59e0b', aps_puntual:'#f59e0b', aps_poligonal:'#10b981' };
+    try {
+      kmlLayerPreview.setStyle({ color: colores[kmlTipoSel] || '#1565c0', fillOpacity:0.18 });
+    } catch(e) {}
+    kmlLayerPreview = null;
+  }
+
+  cerrarPanel('panelKML');
+  mostrarPaso('kml', 1);
+  toast(ok ? '✅ KML guardado correctamente' : '📱 KML guardado offline — se enviará al conectarse');
+  if (ok) cargarCapas();
 }
 
 /* ══════════════════════════════════════
