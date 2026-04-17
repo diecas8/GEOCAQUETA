@@ -1957,7 +1957,10 @@ map.on(L.Draw.Event.CREATED, e => {
   if (tipo === 'sbn_puntual' || tipo === 'sbn_lineal' || tipo === 'sbn_poligonal') openSBNModal(tipo, e.layer);
   else openEditModal(tipo);
 });
-
+map.on(L.Draw.Event.CREATED, e => {
+  pending = e.layer;
+  ...
+});
 /* ══════════════════════════════════════════
    CAPTURA DE COORDENADAS — clic en mapa
    Flujo: Activar modo → clic en mapa →
