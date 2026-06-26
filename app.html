@@ -347,6 +347,12 @@
     .style-lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(15,30,60,0.4);
       width:80px;flex-shrink:0}
     .style-val{font-size:11px;color:#1565c0;min-width:28px;text-align:right;font-family:monospace}
+    /* Forzar tema oscuro en selects de modales — evita fondo blanco/texto blanco del navegador */
+    #modal-aps-edit select, #modal-aps-edit option {
+      background-color: #1a2a45 !important;
+      color: #e3f2fd !important;
+    }
+    #modal-aps-edit select:focus { outline: 2px solid rgba(66,165,245,0.4); }
     .lf-lbl{background:rgba(15,30,50,0.82);border:1px solid rgba(255,255,255,0.18);border-radius:5px;
       padding:2px 7px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;color:#ffffff;
       white-space:nowrap;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.55);line-height:1.5;text-shadow:0 1px 3px rgba(0,0,0,0.8)}
@@ -2031,15 +2037,16 @@ async function guardarVerticesApp() {
   if (_evTabla === 'predios' || _evTabla === 'usos_suelo') {
     var has = 0;
     try { has = Math.round((turf.area({type:'Feature',geometry:geomNueva})/10000)*100)/100; } catch(e){}
-    update = { geom: geomNueva, has };
+    update = { geom: geomNueva, geom_json: geomNueva, has };
   } else if (_evTabla === 'sbn_lineal') {
     var lon = 0;
     try { lon = Math.round(turf.length({type:'Feature',geometry:geomNueva},{units:'meters'})); } catch(e){}
-    update = { geom_json: geomNueva, longitud_m: lon };
+    /* Actualizar geom (PostGIS) Y geom_json — geom es la columna que realmente lee el mapa */
+    update = { geom: geomNueva, geom_json: geomNueva, longitud_m: lon };
   } else {
     var area = 0;
     try { area = Math.round((turf.area({type:'Feature',geometry:geomNueva})/10000)*10000)/10000; } catch(e){}
-    update = { geom_json: geomNueva, area_has: area };
+    update = { geom: geomNueva, geom_json: geomNueva, area_has: area };
   }
 
   try {
@@ -5316,12 +5323,29 @@ window.abrirEditarAPS = async function(tabla, id) {
   var inputOtroVal = esComun ? '' : tipoActual;
   var inputOtroDisplay = (esComun && tipoActual) ? 'none' : 'block';
 
+  /* Info de área (poligonal) o longitud (lineal) — solo informativa, se recalcula al editar vértices */
+  var infoMedida = '';
+  if (tabla === 'sbn_poligonal') {
+    var areaTxt = (d.area_has !== null && d.area_has !== undefined) ? (+d.area_has).toFixed(4) + ' ha' : 'Sin calcular';
+    infoMedida = '<div style="margin-bottom:10px;background:rgba(236,72,153,0.08);border:1px solid rgba(236,72,153,0.25);border-radius:8px;padding:9px 12px;display:flex;justify-content:space-between;align-items:center">' +
+      '<span style="font-size:12px;color:#f9a8d4">⬡ Área del polígono</span>' +
+      '<span style="font-size:14px;font-weight:700;color:#ec4899">'+areaTxt+'</span>' +
+    '</div>';
+  } else if (tabla === 'sbn_lineal') {
+    var lonTxt = (d.longitud_m !== null && d.longitud_m !== undefined) ? Math.round(d.longitud_m) + ' m' : 'Sin calcular';
+    infoMedida = '<div style="margin-bottom:10px;background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.25);border-radius:8px;padding:9px 12px;display:flex;justify-content:space-between;align-items:center">' +
+      '<span style="font-size:12px;color:#c4b5fd">〰 Longitud de la línea</span>' +
+      '<span style="font-size:14px;font-weight:700;color:#8b5cf6">'+lonTxt+'</span>' +
+    '</div>';
+  }
+
   var html =
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(144,202,249,0.6);display:block;margin-bottom:4px">Tipo de APS</label>' +
       selectHTML +
       '<input id="ae_tipo_otro" placeholder="Escribe el tipo si no está en la lista…" value="'+inputOtroVal.replace(/"/g,'&quot;')+'" style="width:100%;display:'+inputOtroDisplay+';background:rgba(21,101,192,0.1);border:1px solid rgba(66,165,245,0.2);border-radius:8px;padding:10px;color:#e3f2fd;font-size:13px;box-sizing:border-box;font-family:DM Sans,sans-serif">' +
     '</div>' +
+    infoMedida +
     '<div style="margin-bottom:10px">' +
       '<label style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(144,202,249,0.6);display:block;margin-bottom:4px">Observaciones</label>' +
       '<textarea id="ae_observacion" style="width:100%;background:rgba(21,101,192,0.1);border:1px solid rgba(66,165,245,0.2);border-radius:8px;padding:10px;color:#e3f2fd;font-size:13px;resize:vertical;min-height:70px;box-sizing:border-box;font-family:DM Sans,sans-serif">'+(d.observacion||'')+'</textarea>' +
