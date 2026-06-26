@@ -5271,7 +5271,16 @@ async function _renderAPS(name, col, label, ico, esLinea, esPol) {
   if (esPol)       opts.style = function() { return {color:col,weight:2.5,fillColor:col,fillOpacity:0.18,opacity:0.85}; };
   else if (esLinea) opts.style = function() { return {color:col,weight:3,opacity:0.85}; };
   else opts.pointToLayer = function(f,ll) { return L.circleMarker(ll,{radius:9,fillColor:col,color:'#fff',weight:2,fillOpacity:0.9}); };
-  opts.onEachFeature = function(f,l) { var p=f.properties; l.bindPopup(_popAPS(name,p,label,ico)); };
+  opts.onEachFeature = function(f,l) {
+    var p=f.properties;
+    l.bindPopup(_popAPS(name,p,label,ico));
+    /* Doble clic abre edición directa — solo si no es invitado */
+    l.on('dblclick', function(e) {
+      L.DomEvent.stopPropagation(e);
+      if (typeof _isGuest !== 'undefined' && _isGuest) { showT('🔒 Acceso de solo lectura'); return; }
+      abrirEditarAPS(name, p.id);
+    });
+  };
   AL[name] = L.geoJSON(gj, opts).addTo(map);
   legData[name] = {visible:true, count:gj.features.length, color:col, label:label};
   applyLZ(); renderLegend();
@@ -5287,21 +5296,41 @@ window.abrirEditarAPS = async function(tabla, id) {
   var r = await sb.from(tabla).select('*').eq('id',id).single();
   if (r.error||!r.data) { showT('❌ Error cargando datos'); return; }
   var d = r.data;
-  var campos = [
-    {key:'categoria',label:'Categoría',tipo:'text'},
-    {key:'tipo_aps',label:'Tipo APS',tipo:'text'},
-    {key:'predio',label:'Predio',tipo:'text'},
-    {key:'nombre_predio',label:'Nombre predio',tipo:'text'},
-    {key:'observaciones',label:'Observaciones',tipo:'textarea'},
-    {key:'obs',label:'Notas',tipo:'textarea'},
+
+  /* Tipos predefinidos comunes de SBN — el usuario puede elegir o escribir uno propio */
+  var tiposComunes = [
+    'Cerca viva','Aislamiento','Reforestación','Bosque de galería','Nacimiento de agua',
+    'Corredor biológico','Conservación','Restauración','Sistema silvopastoril',
+    'Sistema agroforestal','Barrera rompevientos','Humedal','Otro'
   ];
-  var filas = campos.filter(function(cf){ return d[cf.key]!==undefined; }).map(function(cf){
-    var val = (d[cf.key]||'').toString().replace(/"/g,'&quot;');
-    var inp = cf.tipo==='textarea'
-      ? '<textarea id="ae_'+cf.key+'" style="width:100%;background:rgba(21,101,192,0.1);border:1px solid rgba(66,165,245,0.2);border-radius:8px;padding:10px;color:#e3f2fd;font-size:13px;resize:vertical;min-height:60px;box-sizing:border-box;font-family:DM Sans,sans-serif">'+(d[cf.key]||'')+'</textarea>'
-      : '<input id="ae_'+cf.key+'" value="'+val+'" style="width:100%;background:rgba(21,101,192,0.1);border:1px solid rgba(66,165,245,0.2);border-radius:8px;padding:10px;color:#e3f2fd;font-size:13px;box-sizing:border-box;font-family:DM Sans,sans-serif">';
-    return '<div style="margin-bottom:10px"><label style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(144,202,249,0.6);display:block;margin-bottom:4px">'+cf.label+'</label>'+inp+'</div>';
-  }).join('');
+  var tipoActual = d.tipo_sbn || '';
+  var esComun = tiposComunes.indexOf(tipoActual) > -1;
+
+  var selectHTML = '<select id="ae_tipo_sel" onchange="document.getElementById(\'ae_tipo_otro\').style.display=(this.value===\'Otro\'?\'block\':\'none\')" style="width:100%;background:rgba(21,101,192,0.1);border:1px solid rgba(66,165,245,0.2);border-radius:8px;padding:10px;color:#e3f2fd;font-size:13px;box-sizing:border-box;font-family:DM Sans,sans-serif;margin-bottom:8px">' +
+    tiposComunes.map(function(t){
+      var sel = (t===tipoActual || (!esComun && t==='Otro')) ? ' selected' : '';
+      return '<option value="'+t+'"'+sel+'>'+t+'</option>';
+    }).join('') +
+    '</select>';
+
+  var inputOtroVal = esComun ? '' : tipoActual;
+  var inputOtroDisplay = (esComun && tipoActual) ? 'none' : 'block';
+
+  var html =
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(144,202,249,0.6);display:block;margin-bottom:4px">Tipo de APS</label>' +
+      selectHTML +
+      '<input id="ae_tipo_otro" placeholder="Escribe el tipo si no está en la lista…" value="'+inputOtroVal.replace(/"/g,'&quot;')+'" style="width:100%;display:'+inputOtroDisplay+';background:rgba(21,101,192,0.1);border:1px solid rgba(66,165,245,0.2);border-radius:8px;padding:10px;color:#e3f2fd;font-size:13px;box-sizing:border-box;font-family:DM Sans,sans-serif">' +
+    '</div>' +
+    '<div style="margin-bottom:10px">' +
+      '<label style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(144,202,249,0.6);display:block;margin-bottom:4px">Observaciones</label>' +
+      '<textarea id="ae_observacion" style="width:100%;background:rgba(21,101,192,0.1);border:1px solid rgba(66,165,245,0.2);border-radius:8px;padding:10px;color:#e3f2fd;font-size:13px;resize:vertical;min-height:70px;box-sizing:border-box;font-family:DM Sans,sans-serif">'+(d.observacion||'')+'</textarea>' +
+    '</div>';
+
+  var btnVertices = (tabla==='sbn_lineal'||tabla==='sbn_poligonal')
+    ? '<button onclick="document.getElementById(&apos;modal-aps-edit&apos;).remove();editarVerticesApp('+id+',&apos;'+tabla+'&apos;)" style="width:100%;padding:12px;background:rgba(245,158,11,0.2);border:1px solid rgba(245,158,11,0.4);border-radius:10px;color:#fbbf24;font-family:DM Sans,sans-serif;font-size:13px;cursor:pointer;margin-top:8px">📐 Editar geometría / vértices</button>'
+    : '';
+
   var m = document.createElement('div');
   m.id = 'modal-aps-edit';
   m.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;justify-content:center';
@@ -5309,17 +5338,27 @@ window.abrirEditarAPS = async function(tabla, id) {
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
     '<span style="font-family:Syne,sans-serif;font-size:16px;font-weight:700;color:#e3f2fd">✏️ Editar APS</span>'+
     '<button onclick="document.getElementById(&apos;modal-aps-edit&apos;).remove()" style="background:none;border:none;color:#90caf9;font-size:24px;cursor:pointer;line-height:1">×</button></div>'+
-    filas+
+    html +
     '<button onclick="guardarEditAPS(&apos;'+tabla+'&apos;,'+id+')" style="width:100%;padding:13px;background:linear-gradient(135deg,#1565c0,#1e88e5);border:none;border-radius:10px;color:white;font-family:Syne,sans-serif;font-size:14px;font-weight:600;cursor:pointer;margin-top:6px">💾 Guardar cambios</button>'+
+    btnVertices +
     '</div>';
   document.body.appendChild(m);
   m.addEventListener('click',function(e){ if(e.target===m) m.remove(); });
 };
+
 window.guardarEditAPS = async function(tabla, id) {
-  var campos = ['categoria','tipo_aps','predio','nombre_predio','observaciones','obs'];
-  var upd = {};
-  campos.forEach(function(k){ var el=document.getElementById('ae_'+k); if(el) upd[k]=el.value; });
-  var r = await sb.from(tabla).update(upd).eq('id',id);
+  var sel = document.getElementById('ae_tipo_sel');
+  var otro = document.getElementById('ae_tipo_otro');
+  var obs = document.getElementById('ae_observacion');
+
+  var tipoFinal = (sel && sel.value === 'Otro') ? (otro ? otro.value.trim() : '') : (sel ? sel.value : '');
+  if (!tipoFinal) tipoFinal = otro ? otro.value.trim() : '';
+
+  if (!tipoFinal) { showT('⚠️ Ingresa o selecciona un tipo de APS'); return; }
+
+  var upd = { tipo_sbn: tipoFinal, observacion: obs ? obs.value : '' };
+
+  var r = await sb.from(tabla).update(upd).eq('id', id);
   if (r.error) { showT('❌ Error: '+r.error.message); return; }
   showT('✅ APS actualizada');
   document.getElementById('modal-aps-edit').remove();
