@@ -2142,23 +2142,32 @@ async function guardarVerticesApp() {
     if (coords.length < 2) { showT('❌ Coordenadas del punto inválidas'); return; }
     update = { lat: coords[1], lng: coords[0], geom_json: geomNueva };
   } else if (_evTabla === 'predios' || _evTabla === 'usos_suelo') {
+    // Predios y usos escriben la columna `geom` (igual que al crear/importar KML),
+    // que acepta el objeto GeoJSON. El trigger sincroniza geom → geom_json.
     var has = 0;
     try { has = Math.round((turf.area({type:'Feature',geometry:geomNueva})/10000)*100)/100; } catch(e){}
-    update = { geom: geomNueva, geom_json: geomNueva, has };
+    update = { geom: geomNueva, has };
   } else if (_evTabla === 'sbn_lineal') {
+    // APS escriben SOLO geom_json (jsonb) → el trigger PostGIS deriva geom.
+    // Escribir geom aquí no funciona y revierte el cambio (igual que al crear la APS).
     var lon = 0;
     try { lon = Math.round(turf.length({type:'Feature',geometry:geomNueva},{units:'meters'})); } catch(e){}
-    /* Actualizar geom (PostGIS) Y geom_json — geom es la columna que realmente lee el mapa */
-    update = { geom: geomNueva, geom_json: geomNueva, longitud_m: lon };
+    update = { geom_json: geomNueva, longitud_m: lon };
   } else {
     var area = 0;
     try { area = Math.round((turf.area({type:'Feature',geometry:geomNueva})/10000)*10000)/10000; } catch(e){}
-    update = { geom: geomNueva, geom_json: geomNueva, area_has: area };
+    update = { geom_json: geomNueva, area_has: area };
   }
 
   try {
-    var r = await sb.from(_evTabla).update(update).eq('id', _evId);
+    // .select() fuerza a PostgREST a devolver las filas afectadas: si vuelve
+    // vacío, el UPDATE no tocó nada (RLS, id inexistente o columna no escribible).
+    var r = await sb.from(_evTabla).update(update).eq('id', _evId).select();
     if (r.error) throw r.error;
+    if (!r.data || r.data.length === 0) {
+      showT('⚠️ El servidor no actualizó ninguna fila (revisa permisos/RLS de ' + _evTabla + ')');
+      return;
+    }
     showT('✅ Geometría actualizada');
     cancelarVerticesApp();
     refreshAll();
