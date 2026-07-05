@@ -1994,7 +1994,7 @@ async function doLogout() {
 /* ══════════════════════════════════════
    EDITAR VÉRTICES EN APP DE ESCRITORIO
 ══════════════════════════════════════ */
-var _evId = null, _evTabla = null, _evGrupo = null, _evCapas = [];
+var _evId = null, _evTabla = null, _evGrupo = null, _evCapas = [], _evEraMulti = false;
 
 async function editarVerticesApp(id, tabla) {
   map.closePopup();
@@ -2019,20 +2019,38 @@ async function editarVerticesApp(id, tabla) {
     _evId = id; _evTabla = tabla;   // cancelarVerticesApp los resetea, se reasignan
     _evGrupo = new L.FeatureGroup();
     _evCapas = [];
+    _evEraMulti = (geom.type === 'MultiPolygon' || geom.type === 'MultiLineString');
 
-    var tmp = L.geoJSON({ type:'Feature', geometry:geom }, {
-      style:{ color:'#f59e0b', weight:3, fillColor:'#f59e0b', fillOpacity:0.15, dashArray:'6,4' },
-      // Puntos: marcador arrastrable en vez de círculo (permite mover el vértice)
-      pointToLayer: function(f, ll) {
-        return L.marker(ll, { draggable:true });
-      }
-    });
+    // Leaflet.Draw NO edita multigeometrías (MultiPolygon/MultiLineString).
+    // Se descomponen en partes simples (Polygon/LineString/Point) y se crean
+    // capas NATIVAS de Leaflet (L.polygon / L.polyline / L.marker), que sí
+    // traen el handler `editing` poblado y permiten arrastrar vértices.
+    var estilo = { color:'#f59e0b', weight:3, fillColor:'#f59e0b', fillOpacity:0.15, dashArray:'6,4' };
 
-    // Añadir cada sub-capa al grupo y activar su editor individual.
-    // Usar layer.editing.enable() por capa (estable en Leaflet.Draw) evita el
-    // error "Cannot read properties of null (reading 'lat')" que lanza
-    // L.EditToolbar.Edit sobre el FeatureGroup en capas creadas con L.geoJSON.
-    tmp.eachLayer(function(l) {
+    // Convierte [lng,lat] de un anillo GeoJSON a L.LatLng
+    function _ringToLL(ring) {
+      return ring.map(function(c){ return L.latLng(c[1], c[0]); });
+    }
+
+    var capas = [];
+    if (geom.type === 'Point') {
+      capas.push(L.marker([geom.coordinates[1], geom.coordinates[0]], { draggable:true }));
+    } else if (geom.type === 'LineString') {
+      capas.push(L.polyline(_ringToLL(geom.coordinates), estilo));
+    } else if (geom.type === 'MultiLineString') {
+      geom.coordinates.forEach(function(line){ capas.push(L.polyline(_ringToLL(line), estilo)); });
+    } else if (geom.type === 'Polygon') {
+      // coordinates: [outerRing, hole1, hole2...] → L.polygon acepta array de anillos
+      capas.push(L.polygon(geom.coordinates.map(_ringToLL), estilo));
+    } else if (geom.type === 'MultiPolygon') {
+      // coordinates: [ [rings...], [rings...] ] → un L.polygon por cada polígono
+      geom.coordinates.forEach(function(poly){ capas.push(L.polygon(poly.map(_ringToLL), estilo)); });
+    } else {
+      showT('❌ Tipo de geometría no soportado: ' + geom.type);
+      cancelarVerticesApp(); return;
+    }
+
+    capas.forEach(function(l) {
       _evGrupo.addLayer(l);
       _evCapas.push(l);
     });
@@ -2041,12 +2059,21 @@ async function editarVerticesApp(id, tabla) {
     var activadas = 0;
     _evCapas.forEach(function(l) {
       try {
-        // Polígonos y líneas → editor de vértices de Leaflet.Draw
+        // 1) Marcadores (puntos APS) → arrastrar
+        if (l instanceof L.Marker) {
+          if (l.dragging && typeof l.dragging.enable === 'function') { l.dragging.enable(); activadas++; }
+          return;
+        }
+        // 2) Polígonos / líneas → editor de vértices de Leaflet.Draw.
+        //    L.geoJSON no siempre puebla l.editing, así que lo inicializamos
+        //    manualmente con L.Edit.Poly si hace falta.
+        if (!l.editing && typeof L.Edit !== 'undefined' && L.Edit.Poly) {
+          try { l.editing = new L.Edit.Poly(l); } catch(e){}
+        }
         if (l.editing && typeof l.editing.enable === 'function') {
           l.editing.enable();
           activadas++;
         } else if (l.dragging && typeof l.dragging.enable === 'function') {
-          // Marcadores (puntos) → solo arrastrar
           l.dragging.enable();
           activadas++;
         }
@@ -2076,11 +2103,36 @@ async function guardarVerticesApp() {
     } catch(e){}
   });
 
-  var geomNueva = null;
-  _evGrupo.eachLayer(function(l) {
-    if (l.toGeoJSON) { var f = l.toGeoJSON(); geomNueva = f.geometry || (f.features&&f.features[0]&&f.features[0].geometry); }
-    else if (l.getLayers) { l.getLayers().forEach(function(sl){ if (sl.toGeoJSON) geomNueva = sl.toGeoJSON().geometry; }); }
+  // Recolectar la geometría de TODAS las capas editadas
+  var partes = [];
+  _evCapas.forEach(function(l) {
+    if (!l.toGeoJSON) return;
+    var g = l.toGeoJSON().geometry;
+    if (g) partes.push(g);
   });
+  if (!partes.length) { showT('❌ No se pudo obtener la geometría'); return; }
+
+  // Recomponer al tipo original (Multi*) si venía descompuesto, o dejar simple
+  var geomNueva;
+  if (_evTabla === 'sbn_puntual') {
+    geomNueva = partes[0];   // punto simple
+  } else if (_evTabla === 'sbn_lineal') {
+    if (partes.length > 1 || _evEraMulti) {
+      geomNueva = { type:'MultiLineString', coordinates: partes.map(function(p){
+        return p.type === 'MultiLineString' ? p.coordinates : [p.coordinates];
+      }).reduce(function(a,b){ return a.concat(b); }, []) };
+    } else {
+      geomNueva = partes[0];  // LineString simple
+    }
+  } else {
+    // predios / usos_suelo / sbn_poligonal → siempre MultiPolygon (como se guardaba)
+    var polys = partes.map(function(p){
+      if (p.type === 'Polygon') return [p.coordinates];
+      if (p.type === 'MultiPolygon') return p.coordinates;
+      return [];
+    }).reduce(function(a,b){ return a.concat(b); }, []);
+    geomNueva = { type:'MultiPolygon', coordinates: polys };
+  }
   if (!geomNueva) { showT('❌ No se pudo obtener la geometría'); return; }
 
   var update = {};
@@ -2123,6 +2175,7 @@ function cancelarVerticesApp() {
     });
   }
   _evCapas = [];
+  _evEraMulti = false;
   if (_evGrupo) { try { map.removeLayer(_evGrupo); } catch(e){} _evGrupo = null; }
   _evId = null; _evTabla = null;
   var bar = document.getElementById('barraEditVertices');
