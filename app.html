@@ -1994,7 +1994,7 @@ async function doLogout() {
 /* ══════════════════════════════════════
    EDITAR VÉRTICES EN APP DE ESCRITORIO
 ══════════════════════════════════════ */
-var _evId = null, _evTabla = null, _evGrupo = null, _evCtrl = null;
+var _evId = null, _evTabla = null, _evGrupo = null, _evCapas = [];
 
 async function editarVerticesApp(id, tabla) {
   map.closePopup();
@@ -2002,40 +2002,64 @@ async function editarVerticesApp(id, tabla) {
   _evTabla = tabla;
 
   // Cargar geometría desde Supabase
-  var campo = tabla === 'predios' ? 'geom' : 'geom';
   try {
     var r = await sb.from(tabla).select('*').eq('id', id).single();
     if (r.error) throw r.error;
     var d = r.data;
     var geom = d.geom || d.geom_json;
-    if (typeof geom === 'string') geom = JSON.parse(geom);
-    if (!geom) { showT('❌ Sin geometría para editar'); return; }
+    if (typeof geom === 'string') { try { geom = JSON.parse(geom); } catch(e){ geom = null; } }
+    // sbn_puntual guarda lat/lng; reconstruir Point si no hay geom
+    if (!geom && d.lat != null && d.lng != null) {
+      geom = { type:'Point', coordinates:[parseFloat(d.lng), parseFloat(d.lat)] };
+    }
+    if (!geom || !geom.type) { showT('❌ Sin geometría para editar'); return; }
 
     // Limpiar estado anterior
-    if (_evCtrl)  { try { _evCtrl.disable(); } catch(e){} _evCtrl = null; }
-    if (_evGrupo) { try { map.removeLayer(_evGrupo); } catch(e){} }
+    cancelarVerticesApp();
+    _evId = id; _evTabla = tabla;   // cancelarVerticesApp los resetea, se reasignan
     _evGrupo = new L.FeatureGroup();
+    _evCapas = [];
 
     var tmp = L.geoJSON({ type:'Feature', geometry:geom }, {
-      style:{ color:'#f59e0b', weight:3, fillColor:'#f59e0b', fillOpacity:0.15, dashArray:'6,4' }
+      style:{ color:'#f59e0b', weight:3, fillColor:'#f59e0b', fillOpacity:0.15, dashArray:'6,4' },
+      // Puntos: marcador arrastrable en vez de círculo (permite mover el vértice)
+      pointToLayer: function(f, ll) {
+        return L.marker(ll, { draggable:true });
+      }
     });
-    tmp.eachLayer(function(l){ _evGrupo.addLayer(l); });
+
+    // Añadir cada sub-capa al grupo y activar su editor individual.
+    // Usar layer.editing.enable() por capa (estable en Leaflet.Draw) evita el
+    // error "Cannot read properties of null (reading 'lat')" que lanza
+    // L.EditToolbar.Edit sobre el FeatureGroup en capas creadas con L.geoJSON.
+    tmp.eachLayer(function(l) {
+      _evGrupo.addLayer(l);
+      _evCapas.push(l);
+    });
     _evGrupo.addTo(map);
 
-    // Activar edición automática de vértices
-    try {
-      _evCtrl = new L.EditToolbar.Edit(map, {
-        featureGroup: _evGrupo,
-        selectedPathOptions:{ color:'#f59e0b', dashArray:'6,4', weight:3, fillColor:'#f59e0b', fillOpacity:0.2 }
-      });
-      _evCtrl.enable();
-    } catch(e) { showT('❌ Error al activar editor: ' + e.message); return; }
+    var activadas = 0;
+    _evCapas.forEach(function(l) {
+      try {
+        // Polígonos y líneas → editor de vértices de Leaflet.Draw
+        if (l.editing && typeof l.editing.enable === 'function') {
+          l.editing.enable();
+          activadas++;
+        } else if (l.dragging && typeof l.dragging.enable === 'function') {
+          // Marcadores (puntos) → solo arrastrar
+          l.dragging.enable();
+          activadas++;
+        }
+      } catch(e) { /* seguir con las demás capas */ }
+    });
+
+    if (!activadas) { showT('❌ Esta geometría no admite edición de vértices'); cancelarVerticesApp(); return; }
 
     try { map.fitBounds(_evGrupo.getBounds(), { padding:[80,80], maxZoom:18 }); } catch(e){}
 
     // Mostrar barra flotante
     var bar = document.getElementById('barraEditVertices');
-    var nombres = { predios:'predio', usos_suelo:'uso de suelo', sbn_lineal:'APS lineal', sbn_poligonal:'APS poligonal' };
+    var nombres = { predios:'predio', usos_suelo:'uso de suelo', sbn_puntual:'APS puntual', sbn_lineal:'APS lineal', sbn_poligonal:'APS poligonal' };
     document.getElementById('barraEvTitulo').textContent = '📐 Editando ' + (nombres[tabla]||tabla) + ' #' + id;
     bar.style.display = 'flex';
 
@@ -2044,17 +2068,28 @@ async function editarVerticesApp(id, tabla) {
 
 async function guardarVerticesApp() {
   if (!_evId || !_evTabla || !_evGrupo) return;
-  if (_evCtrl) { try { _evCtrl.save(); _evCtrl.disable(); } catch(e){} _evCtrl = null; }
+  // Cerrar cada editor de capa antes de leer la geometría
+  _evCapas.forEach(function(l) {
+    try {
+      if (l.editing && typeof l.editing.disable === 'function') l.editing.disable();
+      else if (l.dragging && typeof l.dragging.disable === 'function') l.dragging.disable();
+    } catch(e){}
+  });
 
   var geomNueva = null;
   _evGrupo.eachLayer(function(l) {
-    if (l.getLayers) { l.getLayers().forEach(function(sl){ if (sl.toGeoJSON) geomNueva = sl.toGeoJSON().geometry; }); }
-    else if (l.toGeoJSON) { var f = l.toGeoJSON(); geomNueva = f.geometry || (f.features&&f.features[0]&&f.features[0].geometry); }
+    if (l.toGeoJSON) { var f = l.toGeoJSON(); geomNueva = f.geometry || (f.features&&f.features[0]&&f.features[0].geometry); }
+    else if (l.getLayers) { l.getLayers().forEach(function(sl){ if (sl.toGeoJSON) geomNueva = sl.toGeoJSON().geometry; }); }
   });
   if (!geomNueva) { showT('❌ No se pudo obtener la geometría'); return; }
 
   var update = {};
-  if (_evTabla === 'predios' || _evTabla === 'usos_suelo') {
+  if (_evTabla === 'sbn_puntual') {
+    // Punto: guardar lat/lng → el trigger PostGIS recalcula geom
+    var coords = geomNueva.coordinates || [];
+    if (coords.length < 2) { showT('❌ Coordenadas del punto inválidas'); return; }
+    update = { lat: coords[1], lng: coords[0], geom_json: geomNueva };
+  } else if (_evTabla === 'predios' || _evTabla === 'usos_suelo') {
     var has = 0;
     try { has = Math.round((turf.area({type:'Feature',geometry:geomNueva})/10000)*100)/100; } catch(e){}
     update = { geom: geomNueva, geom_json: geomNueva, has };
@@ -2079,10 +2114,19 @@ async function guardarVerticesApp() {
 }
 
 function cancelarVerticesApp() {
-  if (_evCtrl)  { try { _evCtrl.disable(); } catch(e){} _evCtrl = null; }
+  if (_evCapas && _evCapas.length) {
+    _evCapas.forEach(function(l) {
+      try {
+        if (l.editing && typeof l.editing.disable === 'function') l.editing.disable();
+        else if (l.dragging && typeof l.dragging.disable === 'function') l.dragging.disable();
+      } catch(e){}
+    });
+  }
+  _evCapas = [];
   if (_evGrupo) { try { map.removeLayer(_evGrupo); } catch(e){} _evGrupo = null; }
   _evId = null; _evTabla = null;
-  document.getElementById('barraEditVertices').style.display = 'none';
+  var bar = document.getElementById('barraEditVertices');
+  if (bar) bar.style.display = 'none';
 }
 
 /* ── CAMBIAR CLAVE ── */
