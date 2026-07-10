@@ -3806,6 +3806,27 @@ async function _generarPlanoUnPredio(predioId, cfg) {
       apsPol  = (_res[4] && _res[4].data || []).filter(a => a.geom_json);
     }
 
+    // ── Paletas de color por tipo_sbn DENTRO de cada capa ──
+    // Cada tipo distinto recibe un color de la paleta de su capa, de forma
+    // consistente entre el mapa y la leyenda. Poligonal: rosados/magentas.
+    // Lineal: morados/azules. Puntual: verdes/teales.
+    const PAL_POL = ['#ec4899','#db2777','#f472b6','#be185d','#f9a8d4','#9d174d','#fb7185','#e11d48','#831843','#f43f5e'];
+    const PAL_LIN = ['#8b5cf6','#6366f1','#3b82f6','#7c3aed','#a855f7','#4f46e5','#2563eb','#5b21b6','#0ea5e9','#4338ca'];
+    const PAL_PUN = ['#10b981','#059669','#14b8a6','#047857','#34d399','#0d9488','#065f46','#22c55e'];
+    const colPol = {}, colLin = {}, colPun = {};
+    function _asignaColores(lista, mapa, paleta) {
+      let i = 0;
+      lista.forEach(function(a){
+        const t = (a.tipo_sbn || 'Sin tipo');
+        if (!(t in mapa)) mapa[t] = paleta[i++ % paleta.length];
+      });
+    }
+    if (modo === 'aps') {
+      _asignaColores(apsPol, colPol, PAL_POL);
+      _asignaColores(apsLin, colLin, PAL_LIN);
+      _asignaColores(apsPunt, colPun, PAL_PUN);
+    }
+
     function _toGeom(g) {
       if (!g) return null;
       if (typeof g === 'string') { try { return JSON.parse(g); } catch(e){ return null; } }
@@ -3859,34 +3880,31 @@ async function _generarPlanoUnPredio(predioId, cfg) {
     // Renderer CANVAS dedicado: leaflet-image SOLO captura vectores en canvas, no SVG
     const _planoRenderer = L.canvas({ padding: 0.5 });
 
-    // Colores de las capas APS (constantes del geoportal)
-    const COL_APS = { puntual:'#10b981', lineal:'#8b5cf6', poligonal:'#ec4899' };
-
     if (modo === 'usos') {
       layerUsos = L.geoJSON(fcUsos, {
         renderer: _planoRenderer,
         style: function(f){ const c = cultColors[f.properties.cultivo]; return { color:c, weight:1.5, fillColor:c, fillOpacity:0.55 }; }
       }).addTo(map);
     } else {
-      // modo 'aps' → dibujar las tres capas APS (sin usos de suelo)
+      // modo 'aps' → dibujar las tres capas APS (sin usos de suelo), color por tipo_sbn
       const featsAPS = [];
-      apsPol.forEach(function(a){ const g=_toGeom(a.geom_json); if(g) featsAPS.push({ type:'Feature', properties:{ _tipo:'poligonal' }, geometry:g }); });
-      apsLin.forEach(function(a){ const g=_toGeom(a.geom_json); if(g) featsAPS.push({ type:'Feature', properties:{ _tipo:'lineal' }, geometry:g }); });
+      apsPol.forEach(function(a){ const g=_toGeom(a.geom_json); if(g) featsAPS.push({ type:'Feature', properties:{ _tipo:'poligonal', _c: colPol[a.tipo_sbn||'Sin tipo'] }, geometry:g }); });
+      apsLin.forEach(function(a){ const g=_toGeom(a.geom_json); if(g) featsAPS.push({ type:'Feature', properties:{ _tipo:'lineal', _c: colLin[a.tipo_sbn||'Sin tipo'] }, geometry:g }); });
       layerAPS = L.geoJSON({ type:'FeatureCollection', features:featsAPS }, {
         renderer: _planoRenderer,
         style: function(f){
           const t = f.properties._tipo;
-          const c = COL_APS[t] || '#10b981';
+          const c = f.properties._c || '#10b981';
           return t==='poligonal'
             ? { color:c, weight:1.6, fillColor:c, fillOpacity:0.35 }
             : { color:c, weight:3, fillOpacity:0 };
-        },
-        pointToLayer: function(f, ll){ return L.circleMarker(ll, { radius:5, fillColor:COL_APS.puntual, color:'#fff', weight:1.5, fillOpacity:0.95, renderer:_planoRenderer }); }
+        }
       }).addTo(map);
-      // Puntos APS (lat/lng) como capa aparte
+      // Puntos APS (lat/lng) como capa aparte, color por tipo_sbn
       apsPunt.forEach(function(a){
         if (a.lat==null || a.lng==null) return;
-        L.circleMarker([a.lat, a.lng], { radius:5, fillColor:COL_APS.puntual, color:'#fff', weight:1.5, fillOpacity:0.95, renderer:_planoRenderer }).addTo(layerAPS);
+        const c = colPun[a.tipo_sbn||'Sin tipo'] || '#10b981';
+        L.circleMarker([a.lat, a.lng], { radius:5, fillColor:c, color:'#fff', weight:1.5, fillOpacity:0.95, renderer:_planoRenderer }).addTo(layerAPS);
       });
     }
 
@@ -4059,11 +4077,10 @@ async function _generarPlanoUnPredio(predioId, cfg) {
           _dibujarPoligono(g, c, c, px(0.4), 0.55);
         });
       } else {
-        // APS: poligonal (relleno), lineal (línea), puntual (punto)
-        const CA = { puntual:'#10b981', lineal:'#8b5cf6', poligonal:'#ec4899' };
-        apsPol.forEach(function(a){ _dibujarPoligono(_toGeom(a.geom_json), CA.poligonal, CA.poligonal, px(0.5), 0.35); });
-        apsLin.forEach(function(a){ _dibujarLinea(_toGeom(a.geom_json), CA.lineal, px(0.8)); });
-        apsPunt.forEach(function(a){ if(a.lat!=null&&a.lng!=null) _dibujarPunto(a.lat, a.lng, CA.puntual, px(1.3)); });
+        // APS: poligonal (relleno), lineal (línea), puntual (punto) — color por tipo_sbn
+        apsPol.forEach(function(a){ const c=colPol[a.tipo_sbn||'Sin tipo']||'#ec4899'; _dibujarPoligono(_toGeom(a.geom_json), c, c, px(0.5), 0.4); });
+        apsLin.forEach(function(a){ const c=colLin[a.tipo_sbn||'Sin tipo']||'#8b5cf6'; _dibujarLinea(_toGeom(a.geom_json), c, px(0.8)); });
+        apsPunt.forEach(function(a){ if(a.lat!=null&&a.lng!=null){ const c=colPun[a.tipo_sbn||'Sin tipo']||'#10b981'; _dibujarPunto(a.lat, a.lng, c, px(1.3)); } });
       }
       // Límite del predio (línea verde gruesa, sin relleno)
       _dibujarPoligono(geomPredio, null, '#1d9e75', px(0.9), 1);
@@ -4225,8 +4242,7 @@ async function _generarPlanoUnPredio(predioId, cfg) {
     ctx.fillText('Límite del predio', pX+px(9.5), ry+px(1));
 
     } else {
-    // ── Lista de APS por tipo (puntual / lineal / poligonal) ──
-    const CA = { puntual:'#10b981', lineal:'#8b5cf6', poligonal:'#ec4899' };
+    // ── Lista de APS agrupada por tipo_sbn dentro de cada capa ──
     const totalAPS = apsPunt.length + apsLin.length + apsPol.length;
 
     ctx.fillStyle = '#ffffff'; ctx.fillRect(pX, cursorY, pW, legH);
@@ -4236,52 +4252,61 @@ async function _generarPlanoUnPredio(predioId, cfg) {
     ctx.fillText('APS DEL PREDIO', pX+px(3), cursorY+px(4));
 
     let ry = cursorY + px(9.5);
-    const rowH = px(4.0);
     const yMax = cursorY + legH - px(4);
 
-    // Secciones por tipo: título con conteo + filas con tipo_sbn
+    // Devuelve los tipos únicos de una lista, en el orden en que aparecen
+    function _tiposUnicos(lista) {
+      const vistos = [], out = [];
+      lista.forEach(function(a){
+        const t = a.tipo_sbn || 'Sin tipo';
+        if (vistos.indexOf(t) === -1) { vistos.push(t); out.push(t); }
+      });
+      return out;
+    }
+
     const secciones = [
-      { key:'poligonal', ico:'⬡', label:'Poligonal', color:CA.poligonal, lista:apsPol, unidad:'ha', campo:'area_has' },
-      { key:'lineal',    ico:'〰', label:'Lineal',    color:CA.lineal,    lista:apsLin, unidad:'m',  campo:'longitud_m' },
-      { key:'puntual',   ico:'●',  label:'Puntual',   color:CA.puntual,   lista:apsPunt, unidad:'',  campo:null }
+      { label:'Poligonal', lista:apsPol,  colores:colPol },
+      { label:'Lineal',    lista:apsLin,  colores:colLin },
+      { label:'Puntual',   lista:apsPunt, colores:colPun }
     ];
 
     secciones.forEach(function(sec){
       if (ry > yMax) return;
-      // Encabezado de sección
-      ctx.fillStyle = sec.color; ctx.globalAlpha=0.65; ctx.fillRect(pX+px(3), ry-px(2.6), px(3), px(3)); ctx.globalAlpha=1;
-      ctx.strokeStyle = sec.color; ctx.lineWidth=px(0.3); ctx.strokeRect(pX+px(3), ry-px(2.6), px(3), px(3));
+      const tipos = _tiposUnicos(sec.lista);
+      const colorEnc = tipos.length ? (sec.colores[tipos[0]] || '#8a97a6') : '#8a97a6';
+
+      // Encabezado de sección: nombre de la capa + nº de tipos distintos
+      ctx.fillStyle = colorEnc; ctx.globalAlpha=0.65; ctx.fillRect(pX+px(3), ry-px(2.6), px(3), px(3)); ctx.globalAlpha=1;
+      ctx.strokeStyle = colorEnc; ctx.lineWidth=px(0.3); ctx.strokeRect(pX+px(3), ry-px(2.6), px(3), px(3));
       ctx.fillStyle='#0d2847'; ctx.font=`bold ${px(2.6)}px Arial`; ctx.textAlign='left';
       ctx.fillText('APS ' + sec.label, pX+px(7.5), ry);
       ctx.textAlign='right';
-      ctx.fillStyle=sec.color;
-      ctx.fillText(String(sec.lista.length), pX+pW-px(4), ry);
+      ctx.fillStyle=colorEnc;
+      ctx.fillText(String(tipos.length), pX+pW-px(4), ry);
       ctx.textAlign='left';
       ry += px(4);
 
-      if (!sec.lista.length) {
+      if (!tipos.length) {
         ctx.fillStyle='#8a97a6'; ctx.font=`italic ${px(2.3)}px Arial`;
         ctx.fillText('— sin registros —', pX+px(8), ry-px(0.5));
-        ry += px(3.5);
+        ry += px(4);
         return;
       }
 
-      // Filas: cada APS con su tipo_sbn y medida
+      // Una fila por tipo_sbn: swatch con su color + solo el nombre
       ctx.font=`${px(2.4)}px Arial`;
-      sec.lista.forEach(function(a){
+      tipos.forEach(function(t){
         if (ry > yMax) return;
+        const c = sec.colores[t] || '#8a97a6';
+        // swatch del color del tipo
+        ctx.fillStyle=c; ctx.globalAlpha=0.85; ctx.fillRect(pX+px(8), ry-px(2), px(2.4), px(2.4)); ctx.globalAlpha=1;
+        ctx.strokeStyle=c; ctx.lineWidth=px(0.25); ctx.strokeRect(pX+px(8), ry-px(2), px(2.4), px(2.4));
+        // nombre del tipo
         ctx.fillStyle='#2c2c2a'; ctx.textAlign='left';
-        var etiqueta = a.tipo_sbn || 'Sin tipo';
-        _texto1(ctx, '• ' + etiqueta, pX+px(8), ry, pW-px(20));
-        if (sec.campo && a[sec.campo] != null) {
-          var val = sec.unidad==='ha' ? (+a[sec.campo]).toFixed(2) : Math.round(a[sec.campo]);
-          ctx.textAlign='right'; ctx.fillStyle='#5f6b7a';
-          ctx.fillText(val + ' ' + sec.unidad, pX+pW-px(4), ry);
-          ctx.textAlign='left';
-        }
-        ry += px(3.5);
+        _texto1(ctx, t, pX+px(11.5), ry, pW-px(15));
+        ry += px(3.6);
       });
-      ry += px(1.5);
+      ry += px(2);
     });
 
     // Total + límite del predio al pie
