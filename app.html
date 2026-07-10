@@ -3902,6 +3902,13 @@ async function _generarPlanoUnPredio(predioId, cfg) {
       renderer: _planoRenderer,
       style: { color:'#1d9e75', weight:3.5, fill:false, dashArray:null }
     }).addTo(map);
+    // Orden en pantalla: predio a la base; usos/poligonal y luego líneas encima.
+    // (El PDF se genera del canvas directo, que ya respeta este orden.)
+    try {
+      layerPredio.bringToBack();
+      if (layerUsos) layerUsos.bringToFront();
+      if (layerAPS)  layerAPS.bringToFront();
+    } catch(e){}
 
     // ── 4. Encuadrar SOLO sobre el límite del predio ──
     // (los usos caen dentro del predio; incluirlos puede inflar el bounds si
@@ -4059,20 +4066,33 @@ async function _generarPlanoUnPredio(predioId, cfg) {
       // Clip al área del mapa para que nada se salga del recuadro
       ctx.save();
       ctx.beginPath(); ctx.rect(mapX, mapY, mapW, mapH); ctx.clip();
+
+      // Orden de capas (de abajo hacia arriba):
+      //   1. Límite del predio (base)
+      //   2. Usos de suelo   (solo modo 'usos')
+      //   3. APS poligonal   (solo modo 'aps')
+      //   4. APS lineal      (solo modo 'aps') — al final, para que las líneas
+      //      no queden ocultas bajo los polígonos.
+
+      // 1. Límite del predio (línea verde gruesa, sin relleno) — capa base
+      _dibujarPoligono(geomPredio, null, '#1d9e75', px(0.9), 1);
+
       if (modo === 'usos') {
-        // Usos de suelo (relleno por color)
+        // 2. Usos de suelo (relleno por color)
         usosData.forEach(function(u){
           const g = _toGeom(u.geom_json);
           const c = cultColors[u.cultivo||'Sin clasificar'] || '#f59e0b';
           _dibujarPoligono(g, c, c, px(0.4), 0.55);
         });
+        // Redibujar SOLO el borde del predio encima, para que el relleno de los
+        // usos no oculte el límite verde.
+        _dibujarPoligono(geomPredio, null, '#1d9e75', px(0.9), 1);
       } else {
-        // APS: poligonal (relleno) y lineal (línea) — color por tipo_sbn
+        // 3. APS poligonal (relleno) — color por tipo_sbn
         apsPol.forEach(function(a){ const c=colPol[a.tipo_sbn||'Sin tipo']||'#e34a33'; _dibujarPoligono(_toGeom(a.geom_json), c, c, px(0.5), 0.45); });
+        // 4. APS lineal (línea) — dibujada al final, encima de los polígonos
         apsLin.forEach(function(a){ const c=colLin[a.tipo_sbn||'Sin tipo']||'#3182bd'; _dibujarLinea(_toGeom(a.geom_json), c, px(0.9)); });
       }
-      // Límite del predio (línea verde gruesa, sin relleno)
-      _dibujarPoligono(geomPredio, null, '#1d9e75', px(0.9), 1);
       ctx.restore();
     })();
 
