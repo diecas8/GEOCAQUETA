@@ -3762,7 +3762,7 @@ window._pdfTipoChange = function() {
   }
   if (ayuda) {
     ayuda.innerHTML = tipo === 'aps'
-      ? '📐 El plano encuadra el predio e incluye sus APS (puntual, lineal y poligonal), con norte, escala, lista de APS por tipo, logo CBS y cajetín.<br>⏱ La generación puede tardar 6–12 segundos.'
+      ? '📐 El plano encuadra el predio e incluye sus APS lineales y poligonales, con norte, escala, lista de APS por tipo, logo CBS y cajetín.<br>⏱ La generación puede tardar 6–12 segundos.'
       : '📐 El plano encuadra automáticamente el predio y sus usos de suelo, e incluye: norte, escala gráfica y numérica, leyenda, cuadro de áreas, logo CBS y cajetín.<br>⏱ La generación puede tardar 6–12 segundos.';
   }
   // Reevaluar el título según el predio ya elegido
@@ -3779,7 +3779,7 @@ async function _generarPlanoUnPredio(predioId, cfg) {
   // Capas temporales que se crean solo para el plano
   let layerPredio = null, layerUsos = null, layerAPS = null, basemapTmp = null;
   let usosData = [];
-  let apsPunt = [], apsLin = [], apsPol = [];
+  let apsLin = [], apsPol = [];
   let _planoCapasOcultas = [];
   const tooltips = document.querySelectorAll('.leaflet-tooltip');
   let _mapEl = null, _estOrig = null;
@@ -3791,7 +3791,6 @@ async function _generarPlanoUnPredio(predioId, cfg) {
       sb.from('usos_suelo').select('id,cultivo,has,geom_json').eq('id_predio', predioId)
     ];
     if (modo === 'aps') {
-      _peticiones.push(sb.from('sbn_puntual').select('id,tipo_sbn,lat,lng,geom_json').eq('id_predio', predioId));
       _peticiones.push(sb.from('sbn_lineal').select('id,tipo_sbn,longitud_m,geom_json').eq('id_predio', predioId));
       _peticiones.push(sb.from('sbn_poligonal').select('id,tipo_sbn,area_has,geom_json').eq('id_predio', predioId));
     }
@@ -3801,19 +3800,17 @@ async function _generarPlanoUnPredio(predioId, cfg) {
     const predio = rPredio.data;
     usosData = (rUsos.data || []).filter(u => u.geom_json);
     if (modo === 'aps') {
-      apsPunt = (_res[2] && _res[2].data || []);
-      apsLin  = (_res[3] && _res[3].data || []).filter(a => a.geom_json);
-      apsPol  = (_res[4] && _res[4].data || []).filter(a => a.geom_json);
+      apsLin  = (_res[2] && _res[2].data || []).filter(a => a.geom_json);
+      apsPol  = (_res[3] && _res[3].data || []).filter(a => a.geom_json);
     }
 
-    // ── Paletas de color por tipo_sbn DENTRO de cada capa ──
-    // Cada tipo distinto recibe un color de la paleta de su capa, de forma
-    // consistente entre el mapa y la leyenda. Poligonal: rosados/magentas.
-    // Lineal: morados/azules. Puntual: verdes/teales.
-    const PAL_POL = ['#ec4899','#db2777','#f472b6','#be185d','#f9a8d4','#9d174d','#fb7185','#e11d48','#831843','#f43f5e'];
-    const PAL_LIN = ['#8b5cf6','#6366f1','#3b82f6','#7c3aed','#a855f7','#4f46e5','#2563eb','#5b21b6','#0ea5e9','#4338ca'];
-    const PAL_PUN = ['#10b981','#059669','#14b8a6','#047857','#34d399','#0d9488','#065f46','#22c55e'];
-    const colPol = {}, colLin = {}, colPun = {};
+    // ── Paletas de color por tipo_sbn DENTRO de cada capa (criterio cartográfico) ──
+    // Paletas cualitativas/secuenciales estilo ColorBrewer, diferenciadas y
+    // legibles sobre ortofoto e impresión. Poligonal: rampa cálida (áreas/coberturas).
+    // Lineal: rampa fría (elementos lineales). Consistentes entre mapa y leyenda.
+    const PAL_POL = ['#b30000','#e34a33','#fc8d59','#d7301f','#fdbb84','#990000','#ef6548','#fdd49e','#7f0000','#fc4e2a'];
+    const PAL_LIN = ['#08519c','#3182bd','#2b8cbe','#0570b0','#6baed6','#045a8d','#4292c6','#74a9cf','#023858','#2171b5'];
+    const colPol = {}, colLin = {};
     function _asignaColores(lista, mapa, paleta) {
       let i = 0;
       lista.forEach(function(a){
@@ -3824,7 +3821,6 @@ async function _generarPlanoUnPredio(predioId, cfg) {
     if (modo === 'aps') {
       _asignaColores(apsPol, colPol, PAL_POL);
       _asignaColores(apsLin, colLin, PAL_LIN);
-      _asignaColores(apsPunt, colPun, PAL_PUN);
     }
 
     function _toGeom(g) {
@@ -3894,18 +3890,12 @@ async function _generarPlanoUnPredio(predioId, cfg) {
         renderer: _planoRenderer,
         style: function(f){
           const t = f.properties._tipo;
-          const c = f.properties._c || '#10b981';
+          const c = f.properties._c || '#08519c';
           return t==='poligonal'
-            ? { color:c, weight:1.6, fillColor:c, fillOpacity:0.35 }
+            ? { color:c, weight:1.6, fillColor:c, fillOpacity:0.4 }
             : { color:c, weight:3, fillOpacity:0 };
         }
       }).addTo(map);
-      // Puntos APS (lat/lng) como capa aparte, color por tipo_sbn
-      apsPunt.forEach(function(a){
-        if (a.lat==null || a.lng==null) return;
-        const c = colPun[a.tipo_sbn||'Sin tipo'] || '#10b981';
-        L.circleMarker([a.lat, a.lng], { radius:5, fillColor:c, color:'#fff', weight:1.5, fillOpacity:0.95, renderer:_planoRenderer }).addTo(layerAPS);
-      });
     }
 
     layerPredio = L.geoJSON({ type:'Feature', geometry:geomPredio }, {
@@ -4077,10 +4067,9 @@ async function _generarPlanoUnPredio(predioId, cfg) {
           _dibujarPoligono(g, c, c, px(0.4), 0.55);
         });
       } else {
-        // APS: poligonal (relleno), lineal (línea), puntual (punto) — color por tipo_sbn
-        apsPol.forEach(function(a){ const c=colPol[a.tipo_sbn||'Sin tipo']||'#ec4899'; _dibujarPoligono(_toGeom(a.geom_json), c, c, px(0.5), 0.4); });
-        apsLin.forEach(function(a){ const c=colLin[a.tipo_sbn||'Sin tipo']||'#8b5cf6'; _dibujarLinea(_toGeom(a.geom_json), c, px(0.8)); });
-        apsPunt.forEach(function(a){ if(a.lat!=null&&a.lng!=null){ const c=colPun[a.tipo_sbn||'Sin tipo']||'#10b981'; _dibujarPunto(a.lat, a.lng, c, px(1.3)); } });
+        // APS: poligonal (relleno) y lineal (línea) — color por tipo_sbn
+        apsPol.forEach(function(a){ const c=colPol[a.tipo_sbn||'Sin tipo']||'#e34a33'; _dibujarPoligono(_toGeom(a.geom_json), c, c, px(0.5), 0.45); });
+        apsLin.forEach(function(a){ const c=colLin[a.tipo_sbn||'Sin tipo']||'#3182bd'; _dibujarLinea(_toGeom(a.geom_json), c, px(0.9)); });
       }
       // Límite del predio (línea verde gruesa, sin relleno)
       _dibujarPoligono(geomPredio, null, '#1d9e75', px(0.9), 1);
@@ -4243,7 +4232,7 @@ async function _generarPlanoUnPredio(predioId, cfg) {
 
     } else {
     // ── Lista de APS agrupada por tipo_sbn dentro de cada capa ──
-    const totalAPS = apsPunt.length + apsLin.length + apsPol.length;
+    const totalAPS = apsLin.length + apsPol.length;
 
     ctx.fillStyle = '#ffffff'; ctx.fillRect(pX, cursorY, pW, legH);
     ctx.strokeStyle = '#9fb3c8'; ctx.lineWidth=px(0.3); ctx.strokeRect(pX, cursorY, pW, legH);
@@ -4266,8 +4255,7 @@ async function _generarPlanoUnPredio(predioId, cfg) {
 
     const secciones = [
       { label:'Poligonal', lista:apsPol,  colores:colPol },
-      { label:'Lineal',    lista:apsLin,  colores:colLin },
-      { label:'Puntual',   lista:apsPunt, colores:colPun }
+      { label:'Lineal',    lista:apsLin,  colores:colLin }
     ];
 
     secciones.forEach(function(sec){
